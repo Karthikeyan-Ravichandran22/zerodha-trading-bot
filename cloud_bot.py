@@ -43,13 +43,46 @@ class CloudTradingBot:
         self.today_trades = []
         self.today_pnl = 0.0
         self.is_authenticated = False
-        self.access_token = os.getenv("ZERODHA_ACCESS_TOKEN", "")
+        self.client = None
         
         # Market hours (IST)
         self.market_open = dtime(9, 15)
         self.trade_start = dtime(9, 30)
         self.trade_end = dtime(14, 30)
         self.market_close = dtime(15, 30)
+    
+    def authenticate_zerodha(self):
+        """Authenticate with Zerodha using request_token or access_token"""
+        try:
+            self.client = get_zerodha_client()
+            self.client.initialize()
+            
+            # Check for request_token first (needs conversion)
+            request_token = os.getenv("REQUEST_TOKEN", "")
+            access_token = os.getenv("ZERODHA_ACCESS_TOKEN", "")
+            
+            if request_token:
+                logger.info("🔑 Found REQUEST_TOKEN, converting to access_token...")
+                if self.client.authenticate(request_token):
+                    self.is_authenticated = True
+                    logger.info("✅ Zerodha authenticated successfully!")
+                    return True
+                else:
+                    logger.error("❌ Failed to authenticate with request_token")
+            elif access_token:
+                # Try using saved access_token
+                self.client.kite.set_access_token(access_token)
+                self.is_authenticated = True
+                logger.info("✅ Using saved access_token")
+                return True
+            else:
+                logger.warning("⚠️ No token found. Add REQUEST_TOKEN or ZERODHA_ACCESS_TOKEN to Railway variables")
+            
+            return False
+        except Exception as e:
+            logger.error(f"Authentication error: {e}")
+            return False
+        
         
     def is_market_open(self) -> bool:
         """Check if market is open"""
@@ -143,20 +176,22 @@ class CloudTradingBot:
         logger.info(f"📊 Mode: {os.getenv('TRADING_MODE', 'paper').upper()}")
         logger.info(f"📋 Stocks: {', '.join(STOCK_WATCHLIST[:5])}...")
         
+        # Authenticate with Zerodha
+        self.authenticate_zerodha()
+        
         # Try to get Zerodha balance
-        try:
-            client = get_zerodha_client()
-            if client.initialize():
-                margins = client.get_margins()
+        if self.is_authenticated and self.client:
+            try:
+                margins = self.client.get_margins()
                 if margins and 'equity' in margins:
                     available = margins['equity'].get('available', {}).get('live_balance', 0)
                     logger.info(f"🏦 Zerodha Balance: ₹{available:,.2f}")
                 else:
-                    logger.info("🏦 Zerodha Balance: Not authenticated yet")
-            else:
-                logger.info("🏦 Zerodha Balance: API not connected")
-        except Exception as e:
-            logger.info(f"🏦 Zerodha Balance: Unable to fetch ({e})")
+                    logger.info("🏦 Zerodha Balance: ₹0.00")
+            except Exception as e:
+                logger.info(f"🏦 Balance check failed: {e}")
+        else:
+            logger.info("🏦 Zerodha: Not authenticated - Add REQUEST_TOKEN in Railway")
         
         logger.info("="*50)
         
