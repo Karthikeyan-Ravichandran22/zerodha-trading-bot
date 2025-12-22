@@ -9,6 +9,27 @@
 
 ---
 
+## 🚀 FEATURES
+
+### ✅ Trading Features
+- **Multi-Confirmation Scalping Strategy** - 6 indicators for entry
+- **Automatic Weekly Stock Optimization** - Every Sunday at 6 PM
+- **Real-time Telegram Alerts** - Trade signals, exits, daily summary
+- **Brokerage Calculator** - Shows NET profit after all charges
+
+### ✅ Professional Filters
+- **Market Sentiment Filter** - Skips trades against market trend
+- **Time-Based Filters** - Avoids volatile periods (9:15-9:45, 2:15-3:30)
+- **Profitability Check** - Skips trades with <₹20 net profit
+
+### ✅ Risk Management
+- 2% max risk per trade
+- 3% max daily loss limit
+- Automatic position sizing
+- Daily trade limits
+
+---
+
 ## 🌅 DAILY MORNING ROUTINE (Do This Every Trading Day!)
 
 ### ⏰ Before 9:15 AM (Market Open):
@@ -46,25 +67,46 @@ http://127.0.0.1:5000/callback?request_token=XXXXXXXX&action=login&status=succes
 - Click **View Logs**
 - You should see: `✅ Zerodha authenticated successfully!`
 
-### 📊 Bot Schedule:
+---
+
+## 📊 Bot Schedule:
 | Time | Action |
 |------|--------|
 | 9:00 AM | Login to Zerodha, add token |
 | 9:15 AM | Market opens |
-| 9:30 AM | Bot starts scanning for trades |
-| 9:30 - 2:30 PM | Active trading |
-| 3:10 PM | Auto square-off |
-| 3:30 PM | Market closes |
+| 9:45 AM | **Bot starts scanning** (avoids opening volatility) |
+| 9:45 AM - 2:15 PM | Active trading + Telegram alerts |
+| 2:15 PM | Trading stops (avoids closing volatility) |
+| 3:30 PM | Daily summary on Telegram |
+| **Sunday 6 PM** | **Weekly stock optimization** |
 
 ---
 
+## � Current Watchlist (Auto-optimized):
+```
+PNB, SAIL, IDEA, IRFC, PFC, BPCL, BHEL
+```
+*Updated automatically every Sunday based on performance*
 
-## 📊 Realistic Expectations
-| Capital | Realistic Daily Target | Risk Per Trade |
-|---------|------------------------|----------------|
-| ₹10,000 | ₹50-100 (0.5-1%) | ₹100-200 (1-2%) |
-| ₹50,000 | ₹250-500 (0.5-1%) | ₹500-1000 (1-2%) |
-| ₹1,00,000 | ₹500-1000 (0.5-1%) | ₹1000-2000 (1-2%) |
+---
+
+## 📈 Expected Results:
+| Metric | Value |
+|--------|-------|
+| Signals/Day | 3-8 |
+| Win Rate | 50-55% |
+| Net Profit/Day | ₹50-200 (after brokerage) |
+| Monthly Profit | ₹1,000-4,000 |
+
+---
+
+## 📱 Telegram Alerts:
+You'll receive alerts for:
+- 🟢 Trade signals (BUY/SELL)
+- 💚💔 Trade exits (profit/loss)
+- 📊 Daily summary
+
+---
 
 ## 🛠️ Prerequisites
 1. **Zerodha Kite Connect API** subscription (₹2,000/month)
