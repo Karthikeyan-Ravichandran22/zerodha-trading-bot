@@ -7,6 +7,58 @@
 - **Never risk money you can't afford to lose**
 - Start with **paper trading** before using real money
 
+---
+
+## 🌅 DAILY MORNING ROUTINE (Do This Every Trading Day!)
+
+### ⏰ Before 9:15 AM (Market Open):
+
+#### Step 1: Open Login URL
+👉 **Click this link:**
+```
+https://kite.zerodha.com/connect/login?api_key=1yn33ovqlmmlkxns&v=3
+```
+
+#### Step 2: Login with Your Credentials
+- **User ID:** UW5364
+- **Password:** Your password
+- **PIN:** Your 6-digit PIN
+
+#### Step 3: After Login, You'll Be Redirected To:
+```
+http://127.0.0.1:5000/callback?request_token=XXXXXXXX&action=login&status=success
+```
+
+#### Step 4: Copy the Request Token
+- Look for `request_token=XXXXXXXX` in the URL
+- Copy ONLY the value after `=` (e.g., `ABC123XYZ`)
+
+#### Step 5: Add Token to Railway
+1. Go to: **https://railway.app/dashboard**
+2. Click on your **zerodha-trading-bot** project
+3. Click **Variables** tab
+4. Find `REQUEST_TOKEN` (or add new if not exists)
+5. Paste your token value
+6. Railway will auto-redeploy (wait 1-2 minutes)
+
+#### Step 6: Check Logs
+- Go to **Deployments** tab
+- Click **View Logs**
+- You should see: `✅ Zerodha authenticated successfully!`
+
+### 📊 Bot Schedule:
+| Time | Action |
+|------|--------|
+| 9:00 AM | Login to Zerodha, add token |
+| 9:15 AM | Market opens |
+| 9:30 AM | Bot starts scanning for trades |
+| 9:30 - 2:30 PM | Active trading |
+| 3:10 PM | Auto square-off |
+| 3:30 PM | Market closes |
+
+---
+
+
 ## 📊 Realistic Expectations
 | Capital | Realistic Daily Target | Risk Per Trade |
 |---------|------------------------|----------------|
