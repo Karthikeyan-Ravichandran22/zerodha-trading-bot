@@ -26,6 +26,7 @@ from core.data_fetcher import DataFetcher
 from core.zerodha_client import get_zerodha_client
 from strategies.multi_confirmation import MultiConfirmationScalper
 from config.settings import TRADING_CAPITAL, STOCK_WATCHLIST
+from utils.stock_optimizer import StockOptimizer
 
 
 class CloudTradingBot:
@@ -45,11 +46,65 @@ class CloudTradingBot:
         self.is_authenticated = False
         self.client = None
         
+        # Current watchlist (updated weekly)
+        self.current_watchlist = list(STOCK_WATCHLIST)
+        self.stock_optimizer = StockOptimizer(capital=self.capital)
+        self.last_optimization_date = None
+        
         # Market hours (IST)
         self.market_open = dtime(9, 15)
         self.trade_start = dtime(9, 30)
         self.trade_end = dtime(14, 30)
         self.market_close = dtime(15, 30)
+    
+    def weekly_stock_optimization(self):
+        """Run weekly stock optimization - called every Sunday"""
+        today = date.today()
+        
+        # Only run on Sunday
+        if today.weekday() != 6:
+            return
+        
+        # Only run once per week
+        if self.last_optimization_date == today:
+            return
+        
+        logger.info("="*50)
+        logger.info("🔄 WEEKLY STOCK OPTIMIZATION - SUNDAY")
+        logger.info("="*50)
+        
+        try:
+            # Run optimization
+            best_stocks, report = self.stock_optimizer.get_recommendation()
+            
+            if best_stocks:
+                old_watchlist = self.current_watchlist.copy()
+                self.current_watchlist = best_stocks
+                
+                logger.info(f"📋 Old watchlist: {', '.join(old_watchlist)}")
+                logger.info(f"📋 New watchlist: {', '.join(best_stocks)}")
+                
+                # Log which stocks changed
+                added = set(best_stocks) - set(old_watchlist)
+                removed = set(old_watchlist) - set(best_stocks)
+                
+                if added:
+                    logger.info(f"✅ Added: {', '.join(added)}")
+                if removed:
+                    logger.info(f"❌ Removed: {', '.join(removed)}")
+                if not added and not removed:
+                    logger.info("✅ No changes - current stocks are best!")
+                
+                self.last_optimization_date = today
+                logger.info("✅ Weekly optimization complete!")
+            else:
+                logger.warning("⚠️ Optimization returned no stocks - keeping current")
+                
+        except Exception as e:
+            logger.error(f"❌ Optimization error: {e}")
+            logger.info("Keeping current watchlist")
+        
+        logger.info("="*50)
     
     def authenticate_zerodha(self):
         """Authenticate with Zerodha using request_token or access_token"""
@@ -116,9 +171,9 @@ class CloudTradingBot:
             logger.warning(f"Cannot trade: {reason}")
             return
         
-        logger.info(f"🔍 Scanning {len(STOCK_WATCHLIST)} stocks...")
+        logger.info(f"🔍 Scanning {len(self.current_watchlist)} stocks...")
         
-        for symbol in STOCK_WATCHLIST:
+        for symbol in self.current_watchlist:
             try:
                 data = self.data_fetcher.get_ohlc_data(symbol, "5minute", 5)
                 if data is None or len(data) < 30:
@@ -174,7 +229,7 @@ class CloudTradingBot:
         logger.info("="*50)
         logger.info(f"💰 Capital: ₹{self.capital:,.2f}")
         logger.info(f"📊 Mode: {os.getenv('TRADING_MODE', 'paper').upper()}")
-        logger.info(f"📋 Stocks: {', '.join(STOCK_WATCHLIST[:5])}...")
+        logger.info(f"📋 Stocks: {', '.join(self.current_watchlist)}")
         
         # Authenticate with Zerodha
         self.authenticate_zerodha()
@@ -195,6 +250,9 @@ class CloudTradingBot:
         
         logger.info("="*50)
         
+        # Run weekly optimization if today is Sunday
+        self.weekly_stock_optimization()
+        
         # Schedule jobs
         schedule.every().day.at("09:15").do(lambda: logger.info("🔔 Market Open!"))
         schedule.every().day.at("09:30").do(self.scan_for_signals)
@@ -202,7 +260,11 @@ class CloudTradingBot:
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
         
+        # Sunday: Weekly stock optimization at 6 PM
+        schedule.every().sunday.at("18:00").do(self.weekly_stock_optimization)
+        
         logger.info("✅ Bot running. Waiting for market hours...")
+        logger.info("📅 Weekly optimization: Every Sunday at 6 PM")
         
         while True:
             try:
