@@ -27,6 +27,11 @@ from core.zerodha_client import get_zerodha_client
 from strategies.multi_confirmation import MultiConfirmationScalper
 from config.settings import TRADING_CAPITAL, STOCK_WATCHLIST
 from utils.stock_optimizer import StockOptimizer
+from utils.pro_trading import (
+    BrokerageCalculator, MarketSentimentFilter, TimeFilter, 
+    TrailingStopLoss, is_trade_profitable
+)
+from utils.notifications import send_trade_alert, send_exit_alert, send_daily_summary
 
 
 class CloudTradingBot:
@@ -43,6 +48,7 @@ class CloudTradingBot:
         
         self.today_trades = []
         self.today_pnl = 0.0
+        self.today_charges = 0.0  # Track brokerage
         self.is_authenticated = False
         self.client = None
         
@@ -51,10 +57,14 @@ class CloudTradingBot:
         self.stock_optimizer = StockOptimizer(capital=self.capital)
         self.last_optimization_date = None
         
+        # Professional trading features
+        self.market_filter = MarketSentimentFilter()
+        self.last_sentiment_check = None
+        
         # Market hours (IST)
         self.market_open = dtime(9, 15)
-        self.trade_start = dtime(9, 30)
-        self.trade_end = dtime(14, 30)
+        self.trade_start = dtime(9, 45)  # Changed: Start after 9:45 (avoid opening volatility)
+        self.trade_end = dtime(14, 15)   # Changed: End before 2:15 (avoid closing volatility)
         self.market_close = dtime(15, 30)
     
     def weekly_stock_optimization(self):
@@ -171,7 +181,19 @@ class CloudTradingBot:
             logger.warning(f"Cannot trade: {reason}")
             return
         
-        logger.info(f"🔍 Scanning {len(self.current_watchlist)} stocks...")
+        # Time filter - avoid volatile periods
+        is_safe, time_reason = TimeFilter.is_safe_time()
+        if not is_safe:
+            logger.info(f"⏰ Skipping scan: {time_reason}")
+            return
+        
+        # Update market sentiment (once per hour)
+        now = datetime.now()
+        if self.last_sentiment_check is None or (now - self.last_sentiment_check).seconds > 3600:
+            self.market_filter.update()
+            self.last_sentiment_check = now
+        
+        logger.info(f"🔍 Scanning {len(self.current_watchlist)} stocks... (Sentiment: {self.market_filter.sentiment})")
         
         for symbol in self.current_watchlist:
             try:
@@ -183,6 +205,20 @@ class CloudTradingBot:
                 signal = self.strategy.analyze(symbol, data)
                 
                 if signal:
+                    # Check market sentiment
+                    can_trade, sentiment_reason = self.market_filter.should_trade(signal.signal.value)
+                    if not can_trade:
+                        logger.info(f"⚠️ Skipping {symbol}: {sentiment_reason}")
+                        continue
+                    
+                    # Check if trade is profitable after brokerage
+                    is_profitable, profit_reason = is_trade_profitable(
+                        signal.entry_price, signal.target, signal.quantity, min_profit=20
+                    )
+                    if not is_profitable:
+                        logger.info(f"⚠️ Skipping {symbol}: {profit_reason}")
+                        continue
+                    
                     self.process_signal(signal)
                     
             except Exception as e:
@@ -194,32 +230,74 @@ class CloudTradingBot:
         logger.info(f"   Entry: ₹{signal.entry_price} | SL: ₹{signal.stop_loss} | Target: ₹{signal.target}")
         logger.info(f"   Quantity: {signal.quantity} | Confidence: {signal.confidence:.0f}%")
         
-        # Paper trade - just log it
+        # Calculate expected profit after brokerage
+        charges = BrokerageCalculator.calculate(
+            signal.entry_price, signal.target, signal.quantity
+        )
+        logger.info(f"   Expected Net P&L: ₹{charges['net_pnl']:+.2f} (Charges: ₹{charges['total_charges']:.2f})")
+        
+        # Send Telegram alert
+        try:
+            send_trade_alert(
+                action=signal.signal.value,
+                symbol=signal.symbol,
+                entry=signal.entry_price,
+                sl=signal.stop_loss,
+                target=signal.target,
+                qty=signal.quantity
+            )
+        except Exception as e:
+            logger.debug(f"Telegram notification failed: {e}")
+        
+        # Record trade
         self.today_trades.append({
             "symbol": signal.symbol,
             "action": signal.signal.value,
             "entry": signal.entry_price,
+            "target": signal.target,
+            "sl": signal.stop_loss,
             "qty": signal.quantity,
+            "expected_charges": charges['total_charges'],
             "time": datetime.now().strftime("%H:%M:%S")
         })
+        
+        # Add estimated charges
+        self.today_charges += charges['total_charges']
         
         self.risk_manager.record_trade_entry()
     
     def daily_summary(self):
-        """Print daily summary"""
+        """Print daily summary with brokerage included"""
         logger.info("="*50)
         logger.info("📊 DAILY SUMMARY")
         logger.info("="*50)
         logger.info(f"Date: {date.today()}")
         logger.info(f"Trades: {len(self.today_trades)}")
-        logger.info(f"P&L: ₹{self.today_pnl:+,.2f}")
+        logger.info(f"Gross P&L: ₹{self.today_pnl:+,.2f}")
+        logger.info(f"Brokerage/Charges: ₹{self.today_charges:.2f}")
+        net_pnl = self.today_pnl - self.today_charges
+        logger.info(f"NET P&L: ₹{net_pnl:+,.2f}")
         logger.info("="*50)
+        
+        # Send Telegram summary
+        try:
+            stats = {
+                'trades': len(self.today_trades),
+                'gross_profit': max(0, self.today_pnl),
+                'gross_loss': abs(min(0, self.today_pnl)),
+                'net_pnl': net_pnl
+            }
+            send_daily_summary(stats)
+        except Exception as e:
+            logger.debug(f"Telegram summary failed: {e}")
     
     def reset_daily(self):
         """Reset for new trading day"""
         self.today_trades = []
         self.today_pnl = 0.0
+        self.today_charges = 0.0
         self.risk_manager = RiskManager(self.capital)
+        self.last_sentiment_check = None
         logger.info("🔄 Daily reset complete")
     
     def run(self):
