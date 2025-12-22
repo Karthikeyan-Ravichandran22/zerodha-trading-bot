@@ -79,16 +79,16 @@ ACTIVE_STRATEGIES = os.getenv("ACTIVE_STRATEGIES", "vwap_bounce,orb").split(",")
 # =============================================================================
 # STOCK WATCHLIST
 # =============================================================================
+# OPTIMIZED WATCHLIST - Only stocks that showed consistent profits in backtesting
 DEFAULT_WATCHLIST = [
-    "TATAMOTORS", "SBIN", "TATASTEEL", "ITC", "COALINDIA",
-    "ONGC", "PNB", "IRFC", "NHPC", "IOC", "SAIL", "GAIL"
+    "PNB", "SAIL", "IDEA", "IRFC", "PFC", "BPCL", "BHEL"
 ]
 STOCK_WATCHLIST = os.getenv("STOCK_WATCHLIST", ",".join(DEFAULT_WATCHLIST)).split(",")
 
-# Low-price stocks suitable for small capital (price < ₹500)
-SMALL_CAP_WATCHLIST = [
-    "PNB", "IRFC", "NHPC", "SAIL", "IOC", "GAIL", "ONGC",
-    "TATASTEEL", "COALINDIA", "BANKBARODA", "CANBK"
+# Backup watchlist for additional opportunities
+BACKUP_WATCHLIST = [
+    "TATAMOTORS", "SBIN", "TATASTEEL", "ITC", "COALINDIA",
+    "ONGC", "NHPC", "IOC", "GAIL"
 ]
 
 # =============================================================================
