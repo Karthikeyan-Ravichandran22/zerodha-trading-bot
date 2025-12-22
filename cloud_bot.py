@@ -139,7 +139,7 @@ class CloudTradingBot:
         logger.info("🤖 CLOUD TRADING BOT STARTED")
         logger.info("="*50)
         logger.info(f"💰 Capital: ₹{self.capital:,.2f}")
-        logger.info(f"📊 Mode: PAPER TRADING")
+        logger.info(f"📊 Mode: {os.getenv("TRADING_MODE", "paper").upper()}")
         logger.info(f"📋 Stocks: {', '.join(STOCK_WATCHLIST[:5])}...")
         logger.info("="*50)
         
