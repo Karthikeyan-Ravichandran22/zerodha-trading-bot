@@ -1,0 +1,32 @@
+# Environment
+.env
+env/
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.access_token*
+*.pem
+*.key
+
+# Local files
+.agent/

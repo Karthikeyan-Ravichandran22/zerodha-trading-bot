@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Label: Unique identifier for this LaunchAgent -->
+    <key>Label</key>
+    <string>com.zerodha.tradingbot</string>
+    
+    <!-- Description -->
+    <key>Comment</key>
+    <string>Zerodha Auto Trading Bot - Starts at 9:00 AM on weekdays</string>
+    
+    <!-- Program to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/karthi-mac/Desktop/Work_Station/zeroda_trading/env/bin/python</string>
+        <string>/Users/karthi-mac/Desktop/Work_Station/zeroda_trading/scheduled_bot.py</string>
+    </array>
+    
+    <!-- Working Directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/karthi-mac/Desktop/Work_Station/zeroda_trading</string>
+    
+    <!-- Schedule: Run at 9:00 AM Monday-Friday -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <!-- Monday -->
+        <dict>
+            <key>Weekday</key>
+            <integer>1</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- Tuesday -->
+        <dict>
+            <key>Weekday</key>
+            <integer>2</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- Wednesday -->
+        <dict>
+            <key>Weekday</key>
+            <integer>3</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- Thursday -->
+        <dict>
+            <key>Weekday</key>
+            <integer>4</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- Friday -->
+        <dict>
+            <key>Weekday</key>
+            <integer>5</integer>
+            <key>Hour</key>
+            <integer>9</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+    
+    <!-- Environment Variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TRADING_MODE</key>
+        <string>paper</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/Users/karthi-mac/Desktop/Work_Station/zeroda_trading/logs/launchagent_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/karthi-mac/Desktop/Work_Station/zeroda_trading/logs/launchagent_stderr.log</string>
+    
+    <!-- Keep Alive: Restart if it crashes -->
+    <key>KeepAlive</key>
+    <dict>
+        <!-- Only keep alive during market hours (roughly) -->
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    
+    <!-- Run at load (for testing) - set to false for production -->
+    <key>RunAtLoad</key>
+    <false/>
+    
+    <!-- Process type -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <!-- Nice value (lower priority) -->
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>
