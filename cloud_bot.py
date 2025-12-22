@@ -23,6 +23,7 @@ logger.add("logs/cloud_bot.log", rotation="1 day", retention="7 days")
 
 from core.risk_manager import RiskManager
 from core.data_fetcher import DataFetcher
+from core.zerodha_client import get_zerodha_client
 from strategies.multi_confirmation import MultiConfirmationScalper
 from config.settings import TRADING_CAPITAL, STOCK_WATCHLIST
 
@@ -139,8 +140,24 @@ class CloudTradingBot:
         logger.info("🤖 CLOUD TRADING BOT STARTED")
         logger.info("="*50)
         logger.info(f"💰 Capital: ₹{self.capital:,.2f}")
-        logger.info(f"📊 Mode: {os.getenv("TRADING_MODE", "paper").upper()}")
+        logger.info(f"📊 Mode: {os.getenv('TRADING_MODE', 'paper').upper()}")
         logger.info(f"📋 Stocks: {', '.join(STOCK_WATCHLIST[:5])}...")
+        
+        # Try to get Zerodha balance
+        try:
+            client = get_zerodha_client()
+            if client.initialize():
+                margins = client.get_margins()
+                if margins and 'equity' in margins:
+                    available = margins['equity'].get('available', {}).get('live_balance', 0)
+                    logger.info(f"🏦 Zerodha Balance: ₹{available:,.2f}")
+                else:
+                    logger.info("🏦 Zerodha Balance: Not authenticated yet")
+            else:
+                logger.info("🏦 Zerodha Balance: API not connected")
+        except Exception as e:
+            logger.info(f"🏦 Zerodha Balance: Unable to fetch ({e})")
+        
         logger.info("="*50)
         
         # Schedule jobs
