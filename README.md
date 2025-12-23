@@ -11,16 +11,24 @@
 
 ## 🚀 FEATURES
 
-### ✅ Trading Features
+### ✅ AUTO Trading (Full Automation)
+- **Automatic Order Execution** - Bot places real orders on Zerodha
+- **Auto Stop Loss** - SL-M orders placed immediately after entry
+- **Auto Target** - LIMIT orders for profit booking
+- **OCO Logic** - When SL/Target hits, cancels the other order
+- **Position Tracking** - Prevents duplicate trades
+
+### ✅ Signal Detection
 - **Multi-Confirmation Scalping Strategy** - 6 indicators for entry
 - **Automatic Weekly Stock Optimization** - Every Sunday at 6 PM
-- **Real-time Telegram Alerts** - Trade signals, exits, daily summary
+- **Real-time Telegram Alerts** - Trade signals, exits, P&L notifications
 - **Brokerage Calculator** - Shows NET profit after all charges
 
 ### ✅ Professional Filters
 - **Market Sentiment Filter** - Skips trades against market trend
 - **Time-Based Filters** - Avoids volatile periods (9:15-9:45, 2:15-3:30)
 - **Profitability Check** - Skips trades with <₹20 net profit
+- **Duplicate Trade Prevention** - Won't re-enter same stock
 
 ### ✅ Risk Management
 - 2% max risk per trade
@@ -37,7 +45,7 @@
 #### Step 1: Open Login URL
 👉 **Click this link:**
 ```
-https://kite.zerodha.com/connect/login?api_key=1yn33ovqlmmlkxns&v=3
+https://kite.zerodha.com/connect/login?api_key=b1coqi5fcj7stbf9&v=3
 ```
 
 #### Step 2: Login with Your Credentials
