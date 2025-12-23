@@ -16,6 +16,24 @@ app = Flask(__name__)
 # Database paths
 TRADES_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'trades.db')
 CAPITAL_CONFIG = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'capital_config.json')
+ZERODHA_STATUS = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'zerodha_status.json')
+
+
+def get_zerodha_balance():
+    """Get Zerodha balance from saved status file"""
+    try:
+        if os.path.exists(ZERODHA_STATUS):
+            with open(ZERODHA_STATUS, 'r') as f:
+                data = json.load(f)
+                return {
+                    'balance': data.get('balance', 0),
+                    'user_name': data.get('user_name', 'Not Connected'),
+                    'last_updated': data.get('last_updated', '-'),
+                    'is_authenticated': data.get('is_authenticated', False)
+                }
+    except:
+        pass
+    return {'balance': 0, 'user_name': 'Not Connected', 'last_updated': '-', 'is_authenticated': False}
 
 
 def get_capital_stats():
@@ -124,6 +142,7 @@ def api_status():
     today = get_today_stats()
     trades = get_today_trades()
     weekly = get_weekly_stats()
+    zerodha = get_zerodha_balance()
     
     return jsonify({
         'timestamp': datetime.now().isoformat(),
@@ -131,6 +150,7 @@ def api_status():
         'today': today,
         'trades': trades[-10:],  # Last 10 trades
         'weekly': weekly,
+        'zerodha': zerodha,
         'bot_status': 'running'
     })
 

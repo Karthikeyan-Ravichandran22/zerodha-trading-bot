@@ -478,19 +478,34 @@ class CloudTradingBot:
         # Authenticate with Zerodha
         self.authenticate_zerodha()
         
-        # Try to get Zerodha balance
+        # Try to get Zerodha balance and save for dashboard
+        zerodha_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected'}
+        
         if self.is_authenticated and self.client:
             try:
                 margins = self.client.get_margins()
                 if margins and 'equity' in margins:
                     available = margins['equity'].get('available', {}).get('live_balance', 0)
                     logger.info(f"🏦 Zerodha Balance: ₹{available:,.2f}")
+                    zerodha_status['balance'] = available
+                    zerodha_status['is_authenticated'] = True
+                    zerodha_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
                 else:
                     logger.info("🏦 Zerodha Balance: ₹0.00")
             except Exception as e:
                 logger.info(f"🏦 Balance check failed: {e}")
         else:
             logger.info("🏦 Zerodha: Not authenticated - Add REQUEST_TOKEN in Railway")
+        
+        # Save status for web dashboard
+        try:
+            import json
+            zerodha_status['last_updated'] = datetime.now().strftime('%H:%M:%S')
+            os.makedirs('data', exist_ok=True)
+            with open('data/zerodha_status.json', 'w') as f:
+                json.dump(zerodha_status, f, indent=2)
+        except:
+            pass
         
         logger.info("="*50)
         
