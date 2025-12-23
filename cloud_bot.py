@@ -331,6 +331,11 @@ class CloudTradingBot:
         
         logger.info("="*50)
         
+        # Show current IST time
+        ist_now = datetime.now(IST)
+        logger.info(f"🕐 Current IST Time: {ist_now.strftime('%H:%M:%S')}")
+        logger.info(f"📅 Trading Window: 9:45 AM - 2:15 PM IST")
+        
         # Run weekly optimization if today is Sunday
         self.weekly_stock_optimization()
         
