@@ -566,8 +566,75 @@ class CloudTradingBot:
                 time.sleep(60)
 
 
+def start_dashboard():
+    """Start the web dashboard in a separate thread"""
+    try:
+        from flask import Flask, render_template, jsonify
+        import json
+        
+        app = Flask(__name__, 
+                    template_folder='web_dashboard/templates',
+                    static_folder='web_dashboard/static')
+        
+        @app.route('/')
+        def dashboard():
+            return render_template('dashboard.html')
+        
+        @app.route('/api/status')
+        def api_status():
+            # Read data from saved files
+            capital = {'current_capital': 10000, 'total_pnl': 0, 'high_water_mark': 10000, 'growth_percent': 0}
+            zerodha = {'balance': 0, 'user_name': 'Not Connected', 'is_authenticated': False}
+            today = {'total_trades': 0, 'open_trades': 0, 'wins': 0, 'losses': 0, 'win_rate': 0, 'net_pnl': 0}
+            
+            try:
+                if os.path.exists('data/capital_config.json'):
+                    with open('data/capital_config.json', 'r') as f:
+                        data = json.load(f)
+                        capital['current_capital'] = data.get('current_capital', 10000)
+                        capital['total_pnl'] = data.get('total_pnl', 0)
+                        capital['growth_percent'] = ((capital['current_capital'] - 10000) / 10000) * 100
+            except:
+                pass
+            
+            try:
+                if os.path.exists('data/zerodha_status.json'):
+                    with open('data/zerodha_status.json', 'r') as f:
+                        zerodha = json.load(f)
+            except:
+                pass
+            
+            return jsonify({
+                'timestamp': datetime.now().isoformat(),
+                'capital': capital,
+                'today': today,
+                'trades': [],
+                'weekly': [],
+                'zerodha': zerodha,
+                'bot_status': 'running'
+            })
+        
+        port = int(os.environ.get('PORT', 5050))
+        logger.info(f"🌐 Starting dashboard on port {port}...")
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        
+    except Exception as e:
+        logger.warning(f"Dashboard failed to start: {e}")
+
+
 def main():
     """Entry point"""
+    import threading
+    
+    # Start dashboard in background thread
+    dashboard_thread = threading.Thread(target=start_dashboard, daemon=True)
+    dashboard_thread.start()
+    logger.info("🌐 Dashboard thread started")
+    
+    # Give dashboard time to start
+    time.sleep(2)
+    
+    # Run trading bot in main thread
     bot = CloudTradingBot()
     bot.run()
 
