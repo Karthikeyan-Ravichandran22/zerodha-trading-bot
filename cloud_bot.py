@@ -258,8 +258,8 @@ class CloudTradingBot:
             try:
                 logger.info(f"🛒 Placing {signal.signal.value} order for {signal.symbol}...")
                 
-                # Place market order
-                order_id = self.client.place_order(
+                # Step 1: Place ENTRY order (Market)
+                entry_order_id = self.client.place_order(
                     variety="regular",
                     exchange="NSE",
                     tradingsymbol=signal.symbol,
@@ -269,13 +269,67 @@ class CloudTradingBot:
                     order_type="MARKET"
                 )
                 
-                logger.info(f"✅ ORDER PLACED! Order ID: {order_id}")
+                logger.info(f"✅ ENTRY ORDER PLACED! Order ID: {entry_order_id}")
                 logger.info(f"   {signal.signal.value} {signal.quantity} x {signal.symbol} @ MARKET")
+                
+                # Step 2: Place STOP LOSS order
+                try:
+                    import time
+                    time.sleep(1)  # Wait for entry to fill
+                    
+                    # SL order - opposite direction
+                    sl_transaction = "SELL" if signal.signal.value == "BUY" else "BUY"
+                    sl_trigger = signal.stop_loss
+                    
+                    sl_order_id = self.client.place_order(
+                        variety="regular",
+                        exchange="NSE",
+                        tradingsymbol=signal.symbol,
+                        transaction_type=sl_transaction,
+                        quantity=signal.quantity,
+                        product="MIS",
+                        order_type="SL-M",  # Stop Loss Market
+                        trigger_price=sl_trigger
+                    )
+                    
+                    logger.info(f"🛡️ STOP LOSS SET! Order ID: {sl_order_id}")
+                    logger.info(f"   SL Trigger: ₹{sl_trigger}")
+                    
+                except Exception as sl_error:
+                    logger.warning(f"⚠️ SL order failed: {sl_error}")
+                    logger.warning(f"   ⚠️ Position has NO STOP LOSS!")
+                
+                # Step 3: Place TARGET order (Limit sell)
+                try:
+                    target_transaction = "SELL" if signal.signal.value == "BUY" else "BUY"
+                    target_price = signal.target
+                    
+                    target_order_id = self.client.place_order(
+                        variety="regular",
+                        exchange="NSE",
+                        tradingsymbol=signal.symbol,
+                        transaction_type=target_transaction,
+                        quantity=signal.quantity,
+                        product="MIS",
+                        order_type="LIMIT",
+                        price=target_price
+                    )
+                    
+                    logger.info(f"🎯 TARGET SET! Order ID: {target_order_id}")
+                    logger.info(f"   Target Price: ₹{target_price}")
+                    
+                except Exception as target_error:
+                    logger.warning(f"⚠️ Target order failed: {target_error}")
                 
                 # Send Telegram confirmation
                 try:
                     from utils.notifications import send_telegram_message
-                    send_telegram_message(f"✅ ORDER EXECUTED!\n\n{signal.signal.value} {signal.quantity} x {signal.symbol}\nOrder ID: {order_id}")
+                    msg = f"✅ TRADE EXECUTED!\n\n"
+                    msg += f"📈 {signal.signal.value} {signal.quantity} x {signal.symbol}\n"
+                    msg += f"🛡️ Stop Loss: ₹{signal.stop_loss}\n"
+                    msg += f"🎯 Target: ₹{signal.target}\n"
+                    msg += f"\nOrder ID: {entry_order_id}"
+                    send_telegram_message(msg)
                 except:
                     pass
                     
