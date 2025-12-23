@@ -331,25 +331,35 @@ class CloudTradingBot:
         
         logger.info("="*50)
         
-        # Show current IST time
+        # Show current IST time and trading status
         ist_now = datetime.now(IST)
         logger.info(f"🕐 Current IST Time: {ist_now.strftime('%H:%M:%S')}")
         logger.info(f"📅 Trading Window: 9:45 AM - 2:15 PM IST")
+        
+        # Check if in trading window
+        if self.is_trading_time():
+            logger.info("🟢 STATUS: ACTIVELY LOOKING FOR TRADES!")
+        elif self.is_market_open():
+            logger.info("🟡 STATUS: Market open, waiting for trading window (9:45 AM)")
+        else:
+            logger.info("🔴 STATUS: Outside market hours, waiting...")
         
         # Run weekly optimization if today is Sunday
         self.weekly_stock_optimization()
         
         # Schedule jobs
         schedule.every().day.at("09:15").do(lambda: logger.info("🔔 Market Open!"))
+        schedule.every().day.at("09:45").do(lambda: logger.info("🟢 Trading window started! Actively looking for trades..."))
         schedule.every().day.at("09:30").do(self.scan_for_signals)
         schedule.every(5).minutes.do(self.scan_for_signals)
+        schedule.every().day.at("14:15").do(lambda: logger.info("🟡 Trading window ended. No new trades."))
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
         
         # Sunday: Weekly stock optimization at 6 PM
         schedule.every().sunday.at("18:00").do(self.weekly_stock_optimization)
         
-        logger.info("✅ Bot running. Waiting for market hours...")
+        logger.info("✅ Bot running...")
         logger.info("📅 Weekly optimization: Every Sunday at 6 PM")
         
         while True:
