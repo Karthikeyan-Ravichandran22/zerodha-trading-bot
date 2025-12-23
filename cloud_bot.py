@@ -35,6 +35,7 @@ from utils.pro_trading import (
     TrailingStopLoss, is_trade_profitable
 )
 from utils.notifications import send_trade_alert, send_exit_alert, send_daily_summary
+from utils.position_manager import position_manager
 
 
 class CloudTradingBot:
@@ -178,6 +179,11 @@ class CloudTradingBot:
         if not self.is_trading_time():
             return
         
+        # Check and manage open positions (OCO logic)
+        if self.is_authenticated and self.client:
+            position_manager.set_client(self.client)
+            position_manager.check_and_manage_orders()
+        
         # Check daily limits
         can_trade, reason = self.risk_manager.can_take_trade()
         if not can_trade:
@@ -196,6 +202,11 @@ class CloudTradingBot:
             self.market_filter.update()
             self.last_sentiment_check = now
         
+        # Log open positions
+        open_positions = position_manager.get_open_positions()
+        if open_positions:
+            logger.info(f"📊 Open positions: {', '.join(open_positions)}")
+        
         logger.info(f"🔍 Scanning {len(self.current_watchlist)} stocks... (Sentiment: {self.market_filter.sentiment})")
         
         for symbol in self.current_watchlist:
@@ -212,6 +223,11 @@ class CloudTradingBot:
                     can_trade, sentiment_reason = self.market_filter.should_trade(signal.signal.value)
                     if not can_trade:
                         logger.info(f"⚠️ Skipping {symbol}: {sentiment_reason}")
+                        continue
+                    
+                    # Check if already have position in this stock
+                    if position_manager.has_position(symbol):
+                        logger.info(f"⚠️ Skipping {symbol}: Already have open position")
                         continue
                     
                     # Check if trade is profitable after brokerage
@@ -320,6 +336,20 @@ class CloudTradingBot:
                     
                 except Exception as target_error:
                     logger.warning(f"⚠️ Target order failed: {target_error}")
+                    target_order_id = None
+                
+                # Track position for OCO management
+                position_manager.set_client(self.client)
+                position_manager.add_position(
+                    symbol=signal.symbol,
+                    entry_id=entry_order_id,
+                    sl_id=sl_order_id if 'sl_order_id' in dir() else None,
+                    target_id=target_order_id if 'target_order_id' in dir() else None,
+                    qty=signal.quantity,
+                    entry_price=signal.entry_price,
+                    sl_price=signal.stop_loss,
+                    target_price=signal.target
+                )
                 
                 # Send Telegram confirmation
                 try:
