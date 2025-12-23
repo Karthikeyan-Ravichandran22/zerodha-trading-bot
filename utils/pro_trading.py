@@ -8,10 +8,13 @@ Professional Trading Features
 """
 
 import os
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timezone, timedelta
 from typing import Dict, Tuple, Optional
 from loguru import logger
 import yfinance as yf
+
+# IST timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class BrokerageCalculator:
@@ -208,8 +211,8 @@ class TimeFilter:
     
     @classmethod
     def is_safe_time(cls) -> Tuple[bool, str]:
-        """Check if current time is safe for trading"""
-        now = datetime.now().time()
+        """Check if current time is safe for trading (IST)"""
+        now = datetime.now(IST).time()
         
         # Check if in avoid times
         for start, end in cls.AVOID_TIMES:
@@ -220,8 +223,8 @@ class TimeFilter:
     
     @classmethod
     def is_best_time(cls) -> bool:
-        """Check if current time is best for trading"""
-        now = datetime.now().time()
+        """Check if current time is best for trading (IST)"""
+        now = datetime.now(IST).time()
         
         for start, end in cls.BEST_TIMES:
             if start <= now <= end:

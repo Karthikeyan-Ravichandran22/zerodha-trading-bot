@@ -11,10 +11,13 @@ This version:
 import os
 import time
 import schedule
-from datetime import datetime, date, timedelta, time as dtime
+from datetime import datetime, date, timedelta, time as dtime, timezone
 from typing import Optional, List
 from loguru import logger
 import sys
+
+# IST timezone (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 # Setup logging for cloud
 logger.remove()
@@ -150,8 +153,8 @@ class CloudTradingBot:
         
         
     def is_market_open(self) -> bool:
-        """Check if market is open"""
-        now = datetime.now()
+        """Check if market is open (IST timezone)"""
+        now = datetime.now(IST)
         
         # Weekend check
         if now.weekday() >= 5:
@@ -161,8 +164,8 @@ class CloudTradingBot:
         return self.market_open <= current_time <= self.market_close
     
     def is_trading_time(self) -> bool:
-        """Check if it's time to take trades"""
-        now = datetime.now()
+        """Check if it's time to take trades (IST timezone)"""
+        now = datetime.now(IST)
         
         if now.weekday() >= 5:
             return False
