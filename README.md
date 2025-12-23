@@ -9,7 +9,18 @@
 
 ---
 
-## 🚀 FEATURES
+## � QUICK LINKS (Bookmark These!)
+
+| Purpose | Link |
+|---------|------|
+| 📊 **Live Dashboard** | [https://worker-production-65d3.up.railway.app](https://worker-production-65d3.up.railway.app) |
+| 🔑 **Get Token** | [Zerodha Login](https://kite.zerodha.com/connect/login?api_key=b1coqi5fcj7stbf9&v=3) |
+| ⚙️ **Railway Dashboard** | [https://railway.app/dashboard](https://railway.app/dashboard) |
+| 📱 **Telegram Bot** | [@karthikeyantrades_bot](https://t.me/karthikeyantrades_bot) |
+
+---
+
+## �🚀 FEATURES
 
 ### ✅ AUTO Trading (Full Automation)
 - **Automatic Order Execution** - Bot places real orders on Zerodha
