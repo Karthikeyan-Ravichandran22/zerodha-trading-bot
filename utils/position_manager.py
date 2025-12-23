@@ -129,6 +129,20 @@ class PositionManager:
                     pos["close_reason"] = "STOP_LOSS"
                     logger.info(f"💔 {symbol} closed at STOP LOSS")
                     
+                    # Record in trade journal
+                    try:
+                        from utils.trade_journal import trade_journal
+                        pnl = (pos["sl_price"] - pos["entry_price"]) * pos["qty"]
+                        trade_journal.record_exit(
+                            symbol=symbol,
+                            exit_price=pos["sl_price"],
+                            result="STOP_LOSS",
+                            charges=10,  # Estimated exit charges
+                            notes="SL triggered"
+                        )
+                    except:
+                        pass
+                    
                     # Send notification
                     try:
                         from utils.notifications import send_telegram_message
@@ -144,6 +158,20 @@ class PositionManager:
                     pos["status"] = "CLOSED"
                     pos["close_reason"] = "TARGET"
                     logger.info(f"💚 {symbol} closed at TARGET")
+                    
+                    # Record in trade journal
+                    try:
+                        from utils.trade_journal import trade_journal
+                        pnl = (pos["target_price"] - pos["entry_price"]) * pos["qty"]
+                        trade_journal.record_exit(
+                            symbol=symbol,
+                            exit_price=pos["target_price"],
+                            result="TARGET",
+                            charges=10,  # Estimated exit charges
+                            notes="Target achieved"
+                        )
+                    except:
+                        pass
                     
                     # Send notification
                     try:

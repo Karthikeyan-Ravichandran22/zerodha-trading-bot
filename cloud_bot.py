@@ -36,6 +36,8 @@ from utils.pro_trading import (
 )
 from utils.notifications import send_trade_alert, send_exit_alert, send_daily_summary
 from utils.position_manager import position_manager
+from utils.trade_journal import trade_journal
+from utils.dashboard import dashboard
 
 
 class CloudTradingBot:
@@ -351,6 +353,19 @@ class CloudTradingBot:
                     target_price=signal.target
                 )
                 
+                # Record trade in journal
+                trade_journal.record_entry(
+                    symbol=signal.symbol,
+                    action=signal.signal.value,
+                    entry_price=signal.entry_price,
+                    quantity=signal.quantity,
+                    stop_loss=signal.stop_loss,
+                    target=signal.target,
+                    entry_order_id=str(entry_order_id),
+                    sl_order_id=str(sl_order_id) if 'sl_order_id' in dir() and sl_order_id else None,
+                    target_order_id=str(target_order_id) if 'target_order_id' in dir() and target_order_id else None
+                )
+                
                 # Send Telegram confirmation
                 try:
                     from utils.notifications import send_telegram_message
@@ -408,6 +423,26 @@ class CloudTradingBot:
         
         # Send Telegram summary
         try:
+            # Get stats from trade journal
+            journal_stats = trade_journal.get_today_stats()
+            
+            # Display performance dashboard
+            dashboard.display_daily(journal_stats)
+            
+            # Save to database
+            trade_journal.save_daily_summary()
+            
+            # Send Telegram summary
+            try:
+                from utils.notifications import send_telegram_message
+                telegram_msg = dashboard.get_telegram_summary(journal_stats)
+                send_telegram_message(telegram_msg)
+            except:
+                pass
+                
+        except Exception as e:
+            logger.debug(f"Dashboard failed: {e}")
+            # Fallback to basic summary
             stats = {
                 'trades': len(self.today_trades),
                 'gross_profit': max(0, self.today_pnl),
@@ -415,8 +450,6 @@ class CloudTradingBot:
                 'net_pnl': net_pnl
             }
             send_daily_summary(stats)
-        except Exception as e:
-            logger.debug(f"Telegram summary failed: {e}")
     
     def reset_daily(self):
         """Reset for new trading day"""
