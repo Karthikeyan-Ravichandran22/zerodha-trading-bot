@@ -20,6 +20,7 @@
 - **Duplicate Prevention** - Won't re-enter same stock
 
 ### ✅ Analytics & Tracking
+- **Web Dashboard** - Real-time monitoring in browser (localhost:5050)
 - **Trade Journal (SQLite)** - Database stores all trades for analysis
 - **Performance Dashboard** - Win rate, P&L, best/worst trades
 - **Daily Summary** - Beautiful end-of-day report
