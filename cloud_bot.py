@@ -229,8 +229,93 @@ class CloudTradingBot:
         # Fallback to Zerodha
         logger.info("🔄 Trying Zerodha as fallback...")
         return self.authenticate_zerodha()
-        
-        
+    
+    def place_order(self, symbol: str, transaction_type: str, quantity: int,
+                   order_type: str = "MARKET", price: float = 0, 
+                   trigger_price: float = 0) -> str:
+        """
+        Place order on the active broker (Angel One or Zerodha).
+        Returns order ID if successful, None otherwise.
+        """
+        try:
+            if hasattr(self, 'broker') and self.broker == 'angel':
+                # Angel One order
+                variety = "NORMAL"
+                product = "INTRADAY"
+                
+                # Map order types
+                if order_type == "MARKET":
+                    angel_order_type = "MARKET"
+                elif order_type == "LIMIT":
+                    angel_order_type = "LIMIT"
+                elif order_type == "SL-M":
+                    angel_order_type = "STOPLOSS_MARKET"
+                elif order_type == "SL":
+                    angel_order_type = "STOPLOSS_LIMIT"
+                else:
+                    angel_order_type = order_type
+                
+                order_params = {
+                    "variety": variety,
+                    "tradingsymbol": f"{symbol}-EQ",
+                    "symboltoken": self._get_angel_token(symbol),
+                    "transactiontype": transaction_type,
+                    "exchange": "NSE",
+                    "ordertype": angel_order_type,
+                    "producttype": product,
+                    "duration": "DAY",
+                    "quantity": quantity
+                }
+                
+                if order_type in ["LIMIT", "SL"]:
+                    order_params["price"] = str(price)
+                
+                if order_type in ["SL-M", "SL", "STOPLOSS_MARKET", "STOPLOSS_LIMIT"]:
+                    order_params["triggerprice"] = str(trigger_price)
+                
+                response = self.angel_client.placeOrder(order_params)
+                
+                if response.get('status'):
+                    return response['data']['orderid']
+                else:
+                    logger.error(f"Angel One order failed: {response.get('message')}")
+                    return None
+                    
+            elif self.client:
+                # Zerodha order
+                return self.client.place_order(
+                    variety="regular",
+                    exchange="NSE",
+                    tradingsymbol=symbol,
+                    transaction_type=transaction_type,
+                    quantity=quantity,
+                    product="MIS",
+                    order_type=order_type,
+                    price=price if order_type == "LIMIT" else None,
+                    trigger_price=trigger_price if "SL" in order_type else None
+                )
+            else:
+                logger.error("No broker connected")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Order placement error: {e}")
+            return None
+    
+    def _get_angel_token(self, symbol: str) -> str:
+        """Get Angel One symbol token (cached)"""
+        # Common NSE tokens - add more as needed
+        tokens = {
+            "SBIN": "3045", "RELIANCE": "2885", "INFY": "1594", "TCS": "11536",
+            "HDFCBANK": "1333", "ICICIBANK": "4963", "KOTAKBANK": "1922",
+            "TATAMOTORS": "3456", "TATASTEEL": "3499", "SAIL": "2963",
+            "PNB": "10666", "IRFC": "3041", "IDEA": "14366", "CANBK": "10794",
+            "IDFCFIRSTB": "11184", "ITC": "1660", "COALINDIA": "20374",
+            "ONGC": "2475", "BANKBARODA": "4668", "UNIONBANK": "13459",
+            "IOC": "1624", "BPCL": "526", "HINDALCO": "348", "VEDL": "3063",
+            "JINDALSTEL": "6733", "NMDC": "4164", "NTPC": "11630"
+        }
+        return tokens.get(symbol, "0")
     def is_market_open(self) -> bool:
         """Check if market is open (IST timezone)"""
         now = datetime.now(IST)
@@ -348,73 +433,70 @@ class CloudTradingBot:
         
         # EXECUTE ORDER if in AUTO mode and authenticated
         trading_mode = os.getenv('TRADING_MODE', 'paper').lower()
-        if trading_mode == 'auto' and self.is_authenticated and self.client:
+        if trading_mode == 'auto' and self.is_authenticated:
             try:
-                logger.info(f"🛒 Placing {signal.signal.value} order for {signal.symbol}...")
+                broker_name = getattr(self, 'broker', 'zerodha').title()
+                logger.info(f"🛒 Placing {signal.signal.value} order via {broker_name}...")
                 
                 # Step 1: Place ENTRY order (Market)
-                entry_order_id = self.client.place_order(
-                    variety="regular",
-                    exchange="NSE",
-                    tradingsymbol=signal.symbol,
+                entry_order_id = self.place_order(
+                    symbol=signal.symbol,
                     transaction_type="BUY" if signal.signal.value == "BUY" else "SELL",
                     quantity=signal.quantity,
-                    product="MIS",  # Intraday
                     order_type="MARKET"
                 )
+                
+                if not entry_order_id:
+                    logger.error("❌ Entry order failed!")
+                    return
                 
                 logger.info(f"✅ ENTRY ORDER PLACED! Order ID: {entry_order_id}")
                 logger.info(f"   {signal.signal.value} {signal.quantity} x {signal.symbol} @ MARKET")
                 
                 # Step 2: Place STOP LOSS order
+                sl_order_id = None
                 try:
                     import time
                     time.sleep(1)  # Wait for entry to fill
                     
-                    # SL order - opposite direction
                     sl_transaction = "SELL" if signal.signal.value == "BUY" else "BUY"
-                    sl_trigger = signal.stop_loss
                     
-                    sl_order_id = self.client.place_order(
-                        variety="regular",
-                        exchange="NSE",
-                        tradingsymbol=signal.symbol,
+                    sl_order_id = self.place_order(
+                        symbol=signal.symbol,
                         transaction_type=sl_transaction,
                         quantity=signal.quantity,
-                        product="MIS",
-                        order_type="SL-M",  # Stop Loss Market
-                        trigger_price=sl_trigger
+                        order_type="SL-M",
+                        trigger_price=signal.stop_loss
                     )
                     
-                    logger.info(f"🛡️ STOP LOSS SET! Order ID: {sl_order_id}")
-                    logger.info(f"   SL Trigger: ₹{sl_trigger}")
+                    if sl_order_id:
+                        logger.info(f"🛡️ STOP LOSS SET! Order ID: {sl_order_id}")
+                        logger.info(f"   SL Trigger: ₹{signal.stop_loss}")
+                    else:
+                        logger.warning("⚠️ SL order placement returned None")
                     
                 except Exception as sl_error:
                     logger.warning(f"⚠️ SL order failed: {sl_error}")
-                    logger.warning(f"   ⚠️ Position has NO STOP LOSS!")
                 
-                # Step 3: Place TARGET order (Limit sell)
+                # Step 3: Place TARGET order (Limit)
+                target_order_id = None
                 try:
                     target_transaction = "SELL" if signal.signal.value == "BUY" else "BUY"
-                    target_price = signal.target
                     
-                    target_order_id = self.client.place_order(
-                        variety="regular",
-                        exchange="NSE",
-                        tradingsymbol=signal.symbol,
+                    target_order_id = self.place_order(
+                        symbol=signal.symbol,
                         transaction_type=target_transaction,
                         quantity=signal.quantity,
-                        product="MIS",
                         order_type="LIMIT",
-                        price=target_price
+                        price=signal.target
                     )
                     
-                    logger.info(f"🎯 TARGET SET! Order ID: {target_order_id}")
-                    logger.info(f"   Target Price: ₹{target_price}")
+                    if target_order_id:
+                        logger.info(f"🎯 TARGET SET! Order ID: {target_order_id}")
+                        logger.info(f"   Target Price: ₹{signal.target}")
                     
                 except Exception as target_error:
                     logger.warning(f"⚠️ Target order failed: {target_error}")
-                    target_order_id = None
                 
                 # Track position for OCO management
                 position_manager.set_client(self.client)
