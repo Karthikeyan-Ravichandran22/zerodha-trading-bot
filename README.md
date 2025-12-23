@@ -1,4 +1,4 @@
-# 🤖 Zerodha Automated Trading Bot
+# 🤖 Automated Trading Bot
 
 ## ⚠️ IMPORTANT DISCLAIMER
 - Trading in stock market involves **substantial risk of loss**
@@ -9,21 +9,29 @@
 
 ---
 
-## � QUICK LINKS (Bookmark These!)
+## 🔗 QUICK LINKS (Bookmark These!)
 
 | Purpose | Link |
 |---------|------|
 | 📊 **Live Dashboard** | [https://worker-production-65d3.up.railway.app](https://worker-production-65d3.up.railway.app) |
-| 🔑 **Get Token** | [Zerodha Login](https://kite.zerodha.com/connect/login?api_key=b1coqi5fcj7stbf9&v=3) |
 | ⚙️ **Railway Dashboard** | [https://railway.app/dashboard](https://railway.app/dashboard) |
 | 📱 **Telegram Bot** | [@karthikeyantrades_bot](https://t.me/karthikeyantrades_bot) |
 
 ---
 
-## �🚀 FEATURES
+## 🏆 SUPPORTED BROKERS
+
+| Broker | Status | Token Needed |
+|--------|--------|--------------|
+| **Angel One** | ✅ PRIMARY | Auto-login (TOTP) |
+| Zerodha | 🔄 Backup | Daily token refresh |
+
+---
+
+## 🚀 FEATURES
 
 ### ✅ AUTO Trading (Full Automation)
-- **Automatic Order Execution** - Bot places real orders on Zerodha
+- **Automatic Order Execution** - Bot places real orders on Angel One
 - **Auto Stop Loss (SL-M)** - Stop loss orders placed immediately after entry
 - **Auto Target (LIMIT)** - Limit orders for automatic profit booking
 - **OCO Logic** - When SL/Target hits, auto-cancels the other order
@@ -32,16 +40,24 @@
 
 ### ✅ Analytics & Tracking
 - **🌐 Live Web Dashboard** - [https://worker-production-65d3.up.railway.app](https://worker-production-65d3.up.railway.app)
+- **Balance Refresh** - Updates every 5 minutes
 - **Trade Journal (SQLite)** - Database stores all trades for analysis
 - **Performance Dashboard** - Win rate, P&L, best/worst trades
 - **Daily Summary** - Beautiful end-of-day report
-- **Weekly Reports** - Track progress over time
 
 ### ✅ Signal Detection
 - **Multi-Confirmation Strategy** - 6 indicators for entry (VWAP, EMA, RSI, Supertrend, Volume, Price Action)
 - **Automatic Weekly Stock Optimization** - Every Sunday at 6 PM
 - **Real-time Telegram Alerts** - Trade signals, exits, P&L notifications
 - **Brokerage Calculator** - Shows NET profit after all charges
+
+### ✅ Angel One Brokerage Charges
+- **Brokerage**: ₹20 flat per executed order
+- **STT**: 0.025% on sell side
+- **Transaction**: 0.00345% NSE
+- **GST**: 18% on brokerage + transaction
+- **SEBI**: ₹10 per crore
+- **Stamp Duty**: 0.003% on buy side
 
 ### ✅ Professional Filters
 - **Market Sentiment Filter** - Skips trades against NIFTY trend

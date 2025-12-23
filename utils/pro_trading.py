@@ -18,11 +18,15 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 
 class BrokerageCalculator:
-    """Calculate Zerodha brokerage and charges"""
+    """
+    Calculate broker charges for equity intraday trades.
+    Updated for Angel One charges.
+    """
     
-    # Zerodha charges for equity intraday
-    BROKERAGE_PER_ORDER = 20  # ₹20 or 0.03% whichever is lower
-    STT_RATE = 0.00025  # 0.025% on sell side
+    # Angel One charges for equity intraday
+    # Reference: https://www.angelone.in/brokerage-charges
+    BROKERAGE_PER_ORDER = 20  # ₹20 flat per executed order
+    STT_RATE = 0.00025  # 0.025% on sell side only
     TRANSACTION_CHARGES = 0.0000345  # NSE: 0.00345%
     GST_RATE = 0.18  # 18% on brokerage + transaction charges
     SEBI_CHARGES = 0.000001  # ₹10 per crore
