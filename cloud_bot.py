@@ -618,6 +618,43 @@ class CloudTradingBot:
         self.last_sentiment_check = None
         logger.info("🔄 Daily reset complete")
     
+    def refresh_balance(self):
+        """Refresh broker balance and update dashboard (called periodically)"""
+        try:
+            broker_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected'}
+            
+            if self.is_authenticated:
+                if hasattr(self, 'broker') and self.broker == 'angel':
+                    # Angel One balance  
+                    funds = self.angel_client.rmsLimit()
+                    if funds.get('status'):
+                        available = float(funds['data'].get('net', 0))
+                        broker_status['balance'] = available
+                        profile = self.angel_client.getProfile(self.angel_refresh_token)
+                        broker_status['user_name'] = profile.get('data', {}).get('name', 'Connected')
+                        broker_status['is_authenticated'] = True
+                        broker_status['broker'] = 'Angel One'
+                        logger.debug(f"🔄 Balance refreshed: ₹{available:,.2f}")
+                elif self.client:
+                    # Zerodha balance
+                    margins = self.client.get_margins()
+                    if margins and 'equity' in margins:
+                        available = margins['equity'].get('available', {}).get('live_balance', 0)
+                        broker_status['balance'] = available
+                        broker_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
+                        broker_status['is_authenticated'] = True
+                        broker_status['broker'] = 'Zerodha'
+            
+            # Save for dashboard
+            import json
+            broker_status['last_updated'] = datetime.now().strftime('%H:%M:%S')
+            os.makedirs('data', exist_ok=True)
+            with open('data/zerodha_status.json', 'w') as f:
+                json.dump(broker_status, f, indent=2)
+                
+        except Exception as e:
+            logger.debug(f"Balance refresh failed: {e}")
+    
     def run(self):
         """Main run loop"""
         logger.info("="*50)
@@ -696,6 +733,7 @@ class CloudTradingBot:
         schedule.every().day.at("09:45").do(lambda: logger.info("🟢 Trading window started! Actively looking for trades..."))
         schedule.every().day.at("09:30").do(self.scan_for_signals)
         schedule.every(1).minutes.do(self.scan_for_signals)  # Scan every 1 minute
+        schedule.every(5).minutes.do(self.refresh_balance)  # Refresh balance every 5 minutes
         schedule.every().day.at("14:15").do(lambda: logger.info("🟡 Trading window ended. No new trades."))
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
@@ -705,7 +743,7 @@ class CloudTradingBot:
         schedule.every().sunday.at("18:05").do(capital_manager.weekly_compound)
         
         logger.info("✅ Bot running...")
-        logger.info("📅 Weekly optimization + Capital compounding: Every Sunday at 6 PM")
+        logger.info("📅 Balance refresh: Every 5 minutes")
         
         # Immediate scan if in trading window
         if self.is_trading_time():
