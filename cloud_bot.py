@@ -252,6 +252,46 @@ class CloudTradingBot:
         except Exception as e:
             logger.debug(f"Telegram notification failed: {e}")
         
+        # EXECUTE ORDER if in AUTO mode and authenticated
+        trading_mode = os.getenv('TRADING_MODE', 'paper').lower()
+        if trading_mode == 'auto' and self.is_authenticated and self.client:
+            try:
+                logger.info(f"🛒 Placing {signal.signal.value} order for {signal.symbol}...")
+                
+                # Place market order
+                order_id = self.client.place_order(
+                    variety="regular",
+                    exchange="NSE",
+                    tradingsymbol=signal.symbol,
+                    transaction_type="BUY" if signal.signal.value == "BUY" else "SELL",
+                    quantity=signal.quantity,
+                    product="MIS",  # Intraday
+                    order_type="MARKET"
+                )
+                
+                logger.info(f"✅ ORDER PLACED! Order ID: {order_id}")
+                logger.info(f"   {signal.signal.value} {signal.quantity} x {signal.symbol} @ MARKET")
+                
+                # Send Telegram confirmation
+                try:
+                    from utils.notifications import send_telegram_message
+                    send_telegram_message(f"✅ ORDER EXECUTED!\n\n{signal.signal.value} {signal.quantity} x {signal.symbol}\nOrder ID: {order_id}")
+                except:
+                    pass
+                    
+            except Exception as e:
+                logger.error(f"❌ Order failed: {e}")
+                try:
+                    from utils.notifications import send_telegram_message
+                    send_telegram_message(f"❌ Order failed for {signal.symbol}: {e}")
+                except:
+                    pass
+        else:
+            if trading_mode != 'auto':
+                logger.info(f"   Mode: {trading_mode.upper()} - Not executing order")
+            elif not self.is_authenticated:
+                logger.warning(f"   ⚠️ Not authenticated - Cannot execute order")
+        
         # Record trade
         self.today_trades.append({
             "symbol": signal.symbol,
