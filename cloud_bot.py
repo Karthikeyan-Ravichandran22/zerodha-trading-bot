@@ -362,6 +362,11 @@ class CloudTradingBot:
         logger.info("✅ Bot running...")
         logger.info("📅 Weekly optimization: Every Sunday at 6 PM")
         
+        # Immediate scan if in trading window
+        if self.is_trading_time():
+            logger.info("🔄 Running initial scan...")
+            self.scan_for_signals()
+        
         while True:
             try:
                 schedule.run_pending()
