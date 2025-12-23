@@ -13,28 +13,36 @@
 
 ### ✅ AUTO Trading (Full Automation)
 - **Automatic Order Execution** - Bot places real orders on Zerodha
-- **Auto Stop Loss** - SL-M orders placed immediately after entry
-- **Auto Target** - LIMIT orders for profit booking
-- **OCO Logic** - When SL/Target hits, cancels the other order
-- **Position Tracking** - Prevents duplicate trades
+- **Auto Stop Loss (SL-M)** - Stop loss orders placed immediately after entry
+- **Auto Target (LIMIT)** - Limit orders for automatic profit booking
+- **OCO Logic** - When SL/Target hits, auto-cancels the other order
+- **Position Tracking** - Knows all open positions
+- **Duplicate Prevention** - Won't re-enter same stock
+
+### ✅ Analytics & Tracking
+- **Trade Journal (SQLite)** - Database stores all trades for analysis
+- **Performance Dashboard** - Win rate, P&L, best/worst trades
+- **Daily Summary** - Beautiful end-of-day report
+- **Weekly Reports** - Track progress over time
 
 ### ✅ Signal Detection
-- **Multi-Confirmation Scalping Strategy** - 6 indicators for entry
+- **Multi-Confirmation Strategy** - 6 indicators for entry (VWAP, EMA, RSI, Supertrend, Volume, Price Action)
 - **Automatic Weekly Stock Optimization** - Every Sunday at 6 PM
 - **Real-time Telegram Alerts** - Trade signals, exits, P&L notifications
 - **Brokerage Calculator** - Shows NET profit after all charges
 
 ### ✅ Professional Filters
-- **Market Sentiment Filter** - Skips trades against market trend
+- **Market Sentiment Filter** - Skips trades against NIFTY trend
 - **Time-Based Filters** - Avoids volatile periods (9:15-9:45, 2:15-3:30)
 - **Profitability Check** - Skips trades with <₹20 net profit
-- **Duplicate Trade Prevention** - Won't re-enter same stock
+- **Trailing Stop Loss** - Moves SL to breakeven and locks profits
 
 ### ✅ Risk Management
 - 2% max risk per trade
 - 3% max daily loss limit
 - Automatic position sizing
 - Daily trade limits
+- Max positions limit
 
 ---
 
