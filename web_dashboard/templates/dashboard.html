@@ -327,7 +327,7 @@
         <header class="header">
             <div class="logo">
                 <span class="logo-icon">🤖</span>
-                <h1>Zerodha Trading Bot</h1>
+                <h1>Trading Bot</h1>
             </div>
             <div class="status-badge">
                 <span class="status-dot"></span>
@@ -338,7 +338,7 @@
         <!-- Stats Grid -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-label">🏦 Zerodha Balance</div>
+                <div class="stat-label" id="brokerLabel">🏦 Broker Balance</div>
                 <div class="stat-value" id="zerodhaBalance">₹0</div>
                 <div class="stat-change" id="zerodhaUser">Not Connected</div>
             </div>
@@ -434,7 +434,9 @@
             fetch('/api/status')
                 .then(response => response.json())
                 .then(data => {
-                    // Update Zerodha Balance
+                    // Update Broker Balance (Angel One or Zerodha)
+                    const brokerName = data.zerodha.broker || 'Broker';
+                    document.getElementById('brokerLabel').textContent = '🏦 ' + brokerName + ' Balance';
                     document.getElementById('zerodhaBalance').textContent = formatCurrency(data.zerodha.balance);
                     document.getElementById('zerodhaUser').textContent = data.zerodha.user_name;
 
