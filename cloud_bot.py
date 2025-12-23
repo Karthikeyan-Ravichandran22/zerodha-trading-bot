@@ -391,7 +391,7 @@ class CloudTradingBot:
         schedule.every().day.at("09:15").do(lambda: logger.info("🔔 Market Open!"))
         schedule.every().day.at("09:45").do(lambda: logger.info("🟢 Trading window started! Actively looking for trades..."))
         schedule.every().day.at("09:30").do(self.scan_for_signals)
-        schedule.every(5).minutes.do(self.scan_for_signals)
+        schedule.every(1).minutes.do(self.scan_for_signals)  # Scan every 1 minute
         schedule.every().day.at("14:15").do(lambda: logger.info("🟡 Trading window ended. No new trades."))
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
