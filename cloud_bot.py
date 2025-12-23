@@ -38,13 +38,15 @@ from utils.notifications import send_trade_alert, send_exit_alert, send_daily_su
 from utils.position_manager import position_manager
 from utils.trade_journal import trade_journal
 from utils.dashboard import dashboard
+from utils.capital_manager import capital_manager
 
 
 class CloudTradingBot:
     """Trading bot optimized for cloud deployment"""
     
     def __init__(self):
-        self.capital = TRADING_CAPITAL
+        # Use capital manager for dynamic sizing
+        self.capital = capital_manager.get_capital()
         self.risk_manager = RiskManager(self.capital)
         self.data_fetcher = DataFetcher()
         self.strategy = MultiConfirmationScalper(
@@ -465,7 +467,11 @@ class CloudTradingBot:
         logger.info("="*50)
         logger.info("🤖 CLOUD TRADING BOT STARTED")
         logger.info("="*50)
-        logger.info(f"💰 Capital: ₹{self.capital:,.2f}")
+        
+        # Show capital stats
+        capital_stats = capital_manager.get_stats()
+        logger.info(f"💰 Trading Capital: ₹{capital_stats['current_capital']:,.2f}")
+        logger.info(f"📈 Total P&L: ₹{capital_stats['total_pnl']:+,.2f} ({capital_stats['growth_percent']:+.1f}%)")
         logger.info(f"📊 Mode: {os.getenv('TRADING_MODE', 'paper').upper()}")
         logger.info(f"📋 Stocks: {', '.join(self.current_watchlist)}")
         
@@ -513,11 +519,12 @@ class CloudTradingBot:
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
         
-        # Sunday: Weekly stock optimization at 6 PM
+        # Sunday: Weekly stock optimization and capital compounding at 6 PM
         schedule.every().sunday.at("18:00").do(self.weekly_stock_optimization)
+        schedule.every().sunday.at("18:05").do(capital_manager.weekly_compound)
         
         logger.info("✅ Bot running...")
-        logger.info("📅 Weekly optimization: Every Sunday at 6 PM")
+        logger.info("📅 Weekly optimization + Capital compounding: Every Sunday at 6 PM")
         
         # Immediate scan if in trading window
         if self.is_trading_time():

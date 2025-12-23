@@ -37,6 +37,12 @@
 - **Profitability Check** - Skips trades with <₹20 net profit
 - **Trailing Stop Loss** - Moves SL to breakeven and locks profits
 
+### ✅ Capital Growth Mode 📈
+- **Dynamic Position Sizing** - Larger trades as capital grows
+- **Weekly Compounding** - Profits reinvested every Sunday
+- **Drawdown Protection** - Reduces size during losing streaks
+- **High Water Mark Tracking** - Knows your peak equity
+
 ### ✅ Risk Management
 - 2% max risk per trade
 - 3% max daily loss limit

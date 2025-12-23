@@ -129,10 +129,19 @@ class PositionManager:
                     pos["close_reason"] = "STOP_LOSS"
                     logger.info(f"💔 {symbol} closed at STOP LOSS")
                     
+                    # Calculate P&L
+                    pnl = (pos["sl_price"] - pos["entry_price"]) * pos["qty"]
+                    
+                    # Update capital manager
+                    try:
+                        from utils.capital_manager import capital_manager
+                        capital_manager.record_trade_pnl(pnl, charges=10)
+                    except:
+                        pass
+                    
                     # Record in trade journal
                     try:
                         from utils.trade_journal import trade_journal
-                        pnl = (pos["sl_price"] - pos["entry_price"]) * pos["qty"]
                         trade_journal.record_exit(
                             symbol=symbol,
                             exit_price=pos["sl_price"],
@@ -146,7 +155,6 @@ class PositionManager:
                     # Send notification
                     try:
                         from utils.notifications import send_telegram_message
-                        pnl = (pos["sl_price"] - pos["entry_price"]) * pos["qty"]
                         send_telegram_message(f"🛡️ STOP LOSS HIT!\n\n{symbol}\nP&L: ₹{pnl:.2f}")
                     except:
                         pass
@@ -159,10 +167,19 @@ class PositionManager:
                     pos["close_reason"] = "TARGET"
                     logger.info(f"💚 {symbol} closed at TARGET")
                     
+                    # Calculate P&L
+                    pnl = (pos["target_price"] - pos["entry_price"]) * pos["qty"]
+                    
+                    # Update capital manager
+                    try:
+                        from utils.capital_manager import capital_manager
+                        capital_manager.record_trade_pnl(pnl, charges=10)
+                    except:
+                        pass
+                    
                     # Record in trade journal
                     try:
                         from utils.trade_journal import trade_journal
-                        pnl = (pos["target_price"] - pos["entry_price"]) * pos["qty"]
                         trade_journal.record_exit(
                             symbol=symbol,
                             exit_price=pos["target_price"],
@@ -176,7 +193,6 @@ class PositionManager:
                     # Send notification
                     try:
                         from utils.notifications import send_telegram_message
-                        pnl = (pos["target_price"] - pos["entry_price"]) * pos["qty"]
                         send_telegram_message(f"🎯 TARGET HIT!\n\n{symbol}\nProfit: ₹{pnl:.2f}")
                     except:
                         pass
