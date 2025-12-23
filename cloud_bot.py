@@ -124,6 +124,68 @@ class CloudTradingBot:
         
         logger.info("="*50)
     
+    def authenticate_angel_one(self):
+        """Authenticate with Angel One using TOTP (auto-login!)"""
+        try:
+            import pyotp
+            from SmartApi import SmartConnect
+            
+            api_key = os.getenv('ANGEL_API_KEY', '')
+            client_id = os.getenv('ANGEL_CLIENT_ID', '')
+            mpin = os.getenv('ANGEL_MPIN', '')
+            totp_secret = os.getenv('ANGEL_TOTP_SECRET', '')
+            
+            if not all([api_key, client_id, mpin, totp_secret]):
+                logger.info("ℹ️ Angel One credentials not configured")
+                return False
+            
+            logger.info("🔐 Authenticating with Angel One (auto-TOTP)...")
+            
+            # Generate TOTP automatically
+            totp = pyotp.TOTP(totp_secret)
+            otp = totp.now()
+            
+            smart_api = SmartConnect(api_key=api_key)
+            
+            data = smart_api.generateSession(
+                clientCode=client_id,
+                password=mpin,
+                totp=otp
+            )
+            
+            if data.get('status'):
+                self.angel_client = smart_api
+                self.angel_refresh_token = data['data']['refreshToken']
+                self.is_authenticated = True
+                self.broker = 'angel'
+                
+                # Get profile
+                profile = smart_api.getProfile(self.angel_refresh_token)
+                user_name = profile.get('data', {}).get('name', 'Unknown')
+                
+                # Get funds
+                try:
+                    funds = smart_api.rmsLimit()
+                    if funds.get('status'):
+                        available = float(funds['data'].get('net', 0))
+                        logger.info(f"🏦 Angel One Balance: ₹{available:,.2f}")
+                except:
+                    pass
+                
+                logger.info(f"✅ Angel One authenticated: {user_name}")
+                logger.info("🎉 AUTO-LOGIN SUCCESS - No daily token needed!")
+                return True
+            else:
+                logger.warning(f"Angel One login failed: {data.get('message')}")
+                return False
+                
+        except ImportError:
+            logger.info("ℹ️ SmartAPI not installed, skipping Angel One")
+            return False
+        except Exception as e:
+            logger.warning(f"Angel One auth error: {e}")
+            return False
+    
     def authenticate_zerodha(self):
         """Authenticate with Zerodha using request_token or access_token"""
         try:
@@ -138,6 +200,7 @@ class CloudTradingBot:
                 logger.info("🔑 Found REQUEST_TOKEN, converting to access_token...")
                 if self.client.authenticate(request_token):
                     self.is_authenticated = True
+                    self.broker = 'zerodha'
                     logger.info("✅ Zerodha authenticated successfully!")
                     return True
                 else:
@@ -146,15 +209,26 @@ class CloudTradingBot:
                 # Try using saved access_token
                 self.client.kite.set_access_token(access_token)
                 self.is_authenticated = True
+                self.broker = 'zerodha'
                 logger.info("✅ Using saved access_token")
                 return True
             else:
-                logger.warning("⚠️ No token found. Add REQUEST_TOKEN or ZERODHA_ACCESS_TOKEN to Railway variables")
+                logger.warning("⚠️ No Zerodha token found")
             
             return False
         except Exception as e:
-            logger.error(f"Authentication error: {e}")
+            logger.error(f"Zerodha auth error: {e}")
             return False
+    
+    def authenticate(self):
+        """Try Angel One first (auto-login), then Zerodha as fallback"""
+        # Try Angel One first (no daily token needed!)
+        if self.authenticate_angel_one():
+            return True
+        
+        # Fallback to Zerodha
+        logger.info("🔄 Trying Zerodha as fallback...")
+        return self.authenticate_zerodha()
         
         
     def is_market_open(self) -> bool:
@@ -475,35 +549,45 @@ class CloudTradingBot:
         logger.info(f"📊 Mode: {os.getenv('TRADING_MODE', 'paper').upper()}")
         logger.info(f"📋 Stocks: {', '.join(self.current_watchlist)}")
         
-        # Authenticate with Zerodha
-        self.authenticate_zerodha()
+        # Authenticate - tries Angel One first, then Zerodha
+        self.authenticate()
         
-        # Try to get Zerodha balance and save for dashboard
-        zerodha_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected'}
+        # Get balance and save for dashboard
+        broker_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected'}
         
-        if self.is_authenticated and self.client:
+        if self.is_authenticated:
             try:
-                margins = self.client.get_margins()
-                if margins and 'equity' in margins:
-                    available = margins['equity'].get('available', {}).get('live_balance', 0)
-                    logger.info(f"🏦 Zerodha Balance: ₹{available:,.2f}")
-                    zerodha_status['balance'] = available
-                    zerodha_status['is_authenticated'] = True
-                    zerodha_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
-                else:
-                    logger.info("🏦 Zerodha Balance: ₹0.00")
+                if hasattr(self, 'broker') and self.broker == 'angel':
+                    # Angel One balance
+                    funds = self.angel_client.rmsLimit()
+                    if funds.get('status'):
+                        available = float(funds['data'].get('net', 0))
+                        broker_status['balance'] = available
+                        profile = self.angel_client.getProfile(self.angel_refresh_token)
+                        broker_status['user_name'] = profile.get('data', {}).get('name', 'Connected')
+                        broker_status['is_authenticated'] = True
+                        broker_status['broker'] = 'Angel One'
+                elif self.client:
+                    # Zerodha balance
+                    margins = self.client.get_margins()
+                    if margins and 'equity' in margins:
+                        available = margins['equity'].get('available', {}).get('live_balance', 0)
+                        broker_status['balance'] = available
+                        broker_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
+                        broker_status['is_authenticated'] = True
+                        broker_status['broker'] = 'Zerodha'
             except Exception as e:
                 logger.info(f"🏦 Balance check failed: {e}")
         else:
-            logger.info("🏦 Zerodha: Not authenticated - Add REQUEST_TOKEN in Railway")
+            logger.info("🏦 Not authenticated - Add credentials in Railway")
         
         # Save status for web dashboard
         try:
             import json
-            zerodha_status['last_updated'] = datetime.now().strftime('%H:%M:%S')
+            broker_status['last_updated'] = datetime.now().strftime('%H:%M:%S')
             os.makedirs('data', exist_ok=True)
             with open('data/zerodha_status.json', 'w') as f:
-                json.dump(zerodha_status, f, indent=2)
+                json.dump(broker_status, f, indent=2)
         except:
             pass
         
