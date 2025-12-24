@@ -28,6 +28,7 @@ from core.risk_manager import RiskManager
 from core.data_fetcher import DataFetcher
 from core.zerodha_client import get_zerodha_client
 from strategies.multi_confirmation import MultiConfirmationScalper
+from strategies.commodity_scanner import CommodityScanner  # NEW: Commodity trading
 from config.settings import TRADING_CAPITAL, STOCK_WATCHLIST
 from utils.stock_optimizer import StockOptimizer
 from utils.pro_trading import (
@@ -74,6 +75,11 @@ class CloudTradingBot:
         self.trade_start = dtime(9, 45)  # Changed: Start after 9:45 (avoid opening volatility)
         self.trade_end = dtime(14, 15)   # Changed: End before 2:15 (avoid closing volatility)
         self.market_close = dtime(15, 30)
+        
+        # Commodity scanner (Gold, Silver, Crude Oil)
+        self.commodity_scanner = None
+        self.commodity_enabled = os.getenv('COMMODITY_TRADING', 'false').lower() == 'true'
+        logger.info(f"🏆 Commodity Trading: {'Enabled' if self.commodity_enabled else 'Disabled'}")
     
     def weekly_stock_optimization(self):
         """Run weekly stock optimization - called every Sunday"""
@@ -174,6 +180,17 @@ class CloudTradingBot:
                 
                 logger.info(f"✅ Angel One authenticated: {user_name}")
                 logger.info("🎉 AUTO-LOGIN SUCCESS - No daily token needed!")
+                
+                # Initialize commodity scanner with Angel One client
+                if self.commodity_enabled:
+                    try:
+                        self.commodity_scanner = CommodityScanner(angel_client=smart_api)
+                        self.commodity_scanner.angel_refresh_token = self.angel_refresh_token
+                        balance_info = self.commodity_scanner.check_balance()
+                        logger.info(f"🏆 Commodity Scanner: {len(balance_info['tradeable'])} commodities tradeable")
+                    except Exception as ce:
+                        logger.warning(f"Commodity scanner init failed: {ce}")
+                
                 return True
             else:
                 logger.warning(f"Angel One login failed: {data.get('message')}")
@@ -337,10 +354,43 @@ class CloudTradingBot:
         current_time = now.time()
         return self.trade_start <= current_time <= self.trade_end
     
+    def scan_commodities(self):
+        """Scan Gold, Silver, and Crude Oil for signals"""
+        if not self.commodity_enabled or not self.commodity_scanner:
+            return
+        
+        try:
+            logger.info("🏆 Scanning commodities (Gold, Silver, Crude)...")
+            signals = self.commodity_scanner.scan_all(check_balance=False)
+            
+            for signal in signals:
+                logger.info(f"📢 COMMODITY SIGNAL: {signal['commodity']}")
+                logger.info(f"   {signal['signal']} @ {signal['entry']}")
+                logger.info(f"   SL: {signal['sl']} | Target: {signal['target']}")
+                logger.info(f"   Confidence: {signal['confidence']:.0%} | {signal['reason']}")
+                
+                # Send Telegram alert
+                try:
+                    from utils.notifications import send_telegram_message
+                    msg = f"🏆 COMMODITY SIGNAL: {signal['commodity']}\n\n"
+                    msg += f"📈 {signal['signal']} @ ${signal['entry']:.2f}\n"
+                    msg += f"🛡️ Stop Loss: ${signal['sl']:.2f}\n"
+                    msg += f"🎯 Target: ${signal['target']:.2f}\n"
+                    msg += f"💡 {signal['reason']}"
+                    send_telegram_message(msg)
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"Commodity scan error: {e}")
+    
     def scan_for_signals(self):
         """Scan all stocks for signals"""
         if not self.is_trading_time():
             return
+        
+        # Scan commodities first (if enabled)
+        self.scan_commodities()
         
         # Check and manage open positions (OCO logic)
         if self.is_authenticated and self.client:
