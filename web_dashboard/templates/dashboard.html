@@ -364,6 +364,25 @@
             </div>
         </div>
 
+        <!-- Gold Paper Trading Section -->
+        <div class="stats-grid" style="margin-bottom: 20px;">
+            <div class="stat-card" style="border-left: 4px solid #ffd700;">
+                <div class="stat-label">🥇 Gold Paper Trading</div>
+                <div class="stat-value" id="goldPnl">₹0</div>
+                <div class="stat-change" id="goldStats">0W / 0L | 0% Win Rate</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #ffd700;">
+                <div class="stat-label">📊 Gold Price</div>
+                <div class="stat-value" id="goldPrice">$0</div>
+                <div class="stat-change" id="goldTrend">Loading...</div>
+            </div>
+            <div class="stat-card" style="border-left: 4px solid #ffd700;">
+                <div class="stat-label">🎯 Gold Strategy</div>
+                <div class="stat-value" id="goldWinRate">51.6%</div>
+                <div class="stat-change">EMA 9/21 + Filters</div>
+            </div>
+        </div>
+
         <!-- Main Content -->
         <div class="main-grid">
             <!-- Trades Table -->
@@ -507,6 +526,23 @@
                                 </span>
                             </div>
                         `).join('');
+                    }
+
+                    // Update Gold Paper Trading Stats
+                    if (data.gold) {
+                        const goldPnlEl = document.getElementById('goldPnl');
+                        goldPnlEl.textContent = formatCurrency(data.gold.pnl || 0);
+                        goldPnlEl.className = 'stat-value ' + ((data.gold.pnl || 0) >= 0 ? 'positive' : 'negative');
+
+                        document.getElementById('goldStats').textContent =
+                            `${data.gold.wins || 0}W / ${data.gold.losses || 0}L | ${(data.gold.win_rate || 0).toFixed(1)}% Win Rate`;
+
+                        document.getElementById('goldPrice').textContent =
+                            '$' + (data.gold.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        const trendEmoji = data.gold.trend === 'BULLISH' ? '🟢' : data.gold.trend === 'BEARISH' ? '🔴' : '⚪';
+                        document.getElementById('goldTrend').textContent =
+                            `${trendEmoji} ${data.gold.trend || 'N/A'} | RSI: ${(data.gold.rsi || 0).toFixed(1)} | ${data.gold.quality || 'N/A'}`;
                     }
 
                     // Update timestamp

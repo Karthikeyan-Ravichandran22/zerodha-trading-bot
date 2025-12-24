@@ -858,6 +858,35 @@ def start_dashboard():
             except:
                 pass
             
+            # Gold paper trading stats
+            gold_stats = {
+                'pnl': 0,
+                'wins': 0,
+                'losses': 0,
+                'win_rate': 0,
+                'price': 0,
+                'trend': 'N/A',
+                'trades': []
+            }
+            
+            try:
+                from strategies.gold_strategy import gold_strategy
+                stats = gold_strategy.get_paper_stats()
+                gold_stats['pnl'] = stats.get('pnl', 0)
+                gold_stats['wins'] = stats.get('wins', 0)
+                gold_stats['losses'] = stats.get('losses', 0)
+                gold_stats['win_rate'] = stats.get('win_rate', 0)
+                gold_stats['trades'] = gold_strategy.paper_trades[-10:]  # Last 10 trades
+                
+                # Get current price and trend
+                market = gold_strategy.get_market_status()
+                gold_stats['price'] = market.get('price', 0)
+                gold_stats['trend'] = market.get('trend', 'N/A')
+                gold_stats['rsi'] = market.get('rsi', 0)
+                gold_stats['quality'] = market.get('quality', 'N/A')
+            except Exception as ge:
+                pass
+            
             return jsonify({
                 'timestamp': datetime.now().isoformat(),
                 'capital': capital,
@@ -865,6 +894,7 @@ def start_dashboard():
                 'trades': [],
                 'weekly': [],
                 'zerodha': zerodha,
+                'gold': gold_stats,
                 'bot_status': 'running'
             })
         
