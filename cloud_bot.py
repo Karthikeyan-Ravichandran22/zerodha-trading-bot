@@ -884,16 +884,33 @@ NET P&L: ₹{net_pnl:+,.2f}
 def start_dashboard():
     """Start the web dashboard in a separate thread"""
     try:
-        from flask import Flask, render_template, jsonify
+        from flask import Flask, render_template_string, jsonify
         import json
         
-        app = Flask(__name__, 
-                    template_folder='web_dashboard/templates',
-                    static_folder='web_dashboard/static')
+        app = Flask(__name__)
+        
+        SIMPLE_DASHBOARD = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📈 Trading Dashboard</title>
+    <style>
+        body { font-family: Arial; background: #1a1a2e; color: #fff; padding: 20px; }
+        h1 { color: #00ff88; }
+        .card { background: rgba(255,255,255,0.1); padding: 20px; margin: 10px 0; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>📈 Trading Bot Dashboard</h1>
+    <div class="card"><strong>Status:</strong> 🟢 Running</div>
+    <div class="card"><strong>API:</strong> <a href="/api/status" style="color:#00ff88">/api/status</a></div>
+</body>
+</html>
+"""
         
         @app.route('/')
         def dashboard():
-            return render_template('dashboard.html')
+            return render_template_string(SIMPLE_DASHBOARD)
         
         @app.route('/api/status')
         def api_status():
