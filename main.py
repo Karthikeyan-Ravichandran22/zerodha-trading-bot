@@ -259,21 +259,22 @@ Components:
         # Check and create watchlist if needed
         self.check_watchlist_exists()
         
-        # Start dashboard in background
-        if not stock_only:
-            self.dashboard_thread = threading.Thread(target=self.start_dashboard, daemon=True)
-            self.dashboard_thread.start()
-            logger.info("🌐 Dashboard thread started")
-            time.sleep(2)
+        # Start stock bot in background thread
+        self.stock_bot_thread = threading.Thread(target=self.start_stock_bot, daemon=True)
+        self.stock_bot_thread.start()
+        logger.info("📈 Stock bot thread started")
         
         # Start scheduler in background
         scheduler_thread = threading.Thread(target=self.run_scheduled_tasks, daemon=True)
         scheduler_thread.start()
         logger.info("📅 Scheduler thread started")
         
-        # Run stock bot in main thread
-        logger.info("📈 Starting stock trading bot...")
-        self.start_stock_bot()
+        # Give threads time to start
+        time.sleep(2)
+        
+        # Run dashboard in MAIN thread (required for Railway PORT binding)
+        logger.info("🌐 Starting dashboard in main thread...")
+        self.start_dashboard()
 
 
 def main():
