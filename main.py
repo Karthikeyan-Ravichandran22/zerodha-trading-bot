@@ -1,302 +1,428 @@
 #!/usr/bin/env python3
 """
-🚀 UNIFIED TRADING BOT - MAIN ENTRY POINT
-==========================================
+🚀 RAILWAY CLOUD ENTRY POINT
+=============================
 
-This runs:
-1. Weekly Stock Selector (Every Monday 8 AM)
-2. Stock Trading Bot (Mon-Fri 9:15 AM - 3:30 PM)
-3. Web Dashboard (Always running)
-4. Telegram Notifications
-
-Usage:
-    python main.py                    # Run full bot
-    python main.py --stock-only       # Run only stock bot
-    python main.py --scan-now         # Run stock scan immediately
-    
-Deployment:
-    Railway/Cloud: python main.py
+Simple, robust entry point for Railway deployment.
+Runs:
+1. Premium Dashboard (main thread - PORT binding)
+2. Stock Trading Bot (background thread)
+3. Weekly Scheduler (background thread)
 """
 
 import os
 import sys
-import time
 import json
+import time
 import threading
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
+from flask import Flask, render_template_string, jsonify
 from loguru import logger
-import schedule
 
-# Add project root
+# Setup
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-IST = pytz.timezone('Asia/Kolkata')
-
-# Setup logging
 os.makedirs("logs", exist_ok=True)
 os.makedirs("data", exist_ok=True)
 os.makedirs("config", exist_ok=True)
 
 logger.remove()
 logger.add(sys.stdout, format="{time:HH:mm:ss} | {level} | {message}", level="INFO")
-logger.add("logs/main_{time:YYYY-MM-DD}.log", rotation="1 day", retention="7 days", level="INFO")
+
+IST = pytz.timezone('Asia/Kolkata')
+app = Flask(__name__)
+
+# Trading Config
+STRATEGY = {
+    "name": "Gold 93% Win Rate Strategy",
+    "segment": "EQUITY",
+    "exchange": "NSE",
+    "product": "MIS Intraday",
+    "broker": "Angel One",
+    "leverage": "5x"
+}
 
 
-class TradingPipeline:
-    """Main trading pipeline that orchestrates everything"""
+def get_dashboard_data():
+    """Get dashboard data"""
+    data = {
+        'capital': 10000,
+        'daily_pnl': 0,
+        'trades': [],
+        'positions': {},
+        'watchlist': [],
+        'strategy': STRATEGY
+    }
     
-    def __init__(self):
-        self.stock_bot = None
-        self.weekly_scheduler = None
-        self.dashboard_thread = None
-        self.stock_bot_thread = None
-        self.is_running = False
+    try:
+        if os.path.exists("config/smart_watchlist.json"):
+            with open("config/smart_watchlist.json", 'r') as f:
+                wl = json.load(f)
+                data['watchlist'] = wl.get('active_stocks', [])
+                data['capital'] = wl.get('capital', 10000)
+    except:
+        pass
     
-    def check_watchlist_exists(self):
-        """Check if watchlist exists, create if needed"""
-        watchlist_file = "config/smart_watchlist.json"
-        
-        if not os.path.exists(watchlist_file):
-            logger.info("📋 No watchlist found. Running initial stock scan...")
-            self.run_stock_scan()
-            return os.path.exists(watchlist_file)
-        
-        # Check if watchlist is recent (within 7 days)
-        try:
-            with open(watchlist_file, 'r') as f:
-                data = json.load(f)
-                last_updated = data.get('last_updated', '')
-                if last_updated:
-                    last_date = datetime.strptime(last_updated.split()[0], '%Y-%m-%d')
-                    days_old = (datetime.now() - last_date).days
-                    if days_old > 7:
-                        logger.info(f"📋 Watchlist is {days_old} days old. Refreshing...")
-                        self.run_stock_scan()
-        except Exception as e:
-            logger.warning(f"Error checking watchlist age: {e}")
-        
-        return True
+    try:
+        if os.path.exists("data/stock_positions.json"):
+            with open("data/stock_positions.json", 'r') as f:
+                data['positions'] = json.load(f)
+    except:
+        pass
     
-    def run_stock_scan(self):
-        """Run the smart stock selector"""
-        try:
-            from smart_stock_selector import run_smart_selector
-            
-            # Try to get capital from Angel One
-            capital = 10000
-            try:
-                from core.angel_client import AngelClient
-                client = AngelClient()
-                if client.authenticate():
-                    balance = client.get_margin()
-                    if balance and balance > 1000:
-                        capital = int(balance)
-            except:
-                pass
-            
-            logger.info(f"🔍 Running stock scan with capital: Rs {capital:,}")
-            
-            qualified = run_smart_selector(
-                capital=capital,
-                min_win_rate=80,
-                leverage=5
-            )
-            
-            if qualified:
-                # Send Telegram notification
-                try:
-                    from utils.notifications import send_telegram_message
-                    stocks_list = ", ".join([s['name'] for s in qualified[:5]])
-                    msg = f"""
-🏆 *WEEKLY STOCKS SELECTED*
+    return data
 
-{len(qualified)} stocks qualified (80%+ WR):
-{stocks_list}
 
-Trading will start at 9:15 AM
+# Simple but beautiful dark theme dashboard
+DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📈 Gold 93% Win Rate - Trading Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+            color: #fff; 
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #333;
+        }
+        .logo h1 { 
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #00d4aa, #667eea);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .strategy-tag {
+            background: rgba(0, 212, 170, 0.2);
+            color: #00d4aa;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .status { 
+            display: flex; 
+            align-items: center; 
+            gap: 0.5rem;
+            color: #00ff88;
+        }
+        .pulse {
+            width: 10px; height: 10px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .info-banner {
+            background: rgba(0, 212, 170, 0.1);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+        .info-item label { 
+            font-size: 0.75rem; 
+            color: #888; 
+            text-transform: uppercase; 
+            display: block;
+            margin-bottom: 0.3rem;
+        }
+        .info-item span { 
+            font-weight: 600; 
+            color: #00d4aa;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .stat-card h3 { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+        .stat-card .value { font-size: 1.8rem; font-weight: 700; }
+        .stat-card .value.profit { color: #00ff88; }
+        .section {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section h2 { 
+            font-size: 1.1rem; 
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .badge {
+            background: #00d4aa;
+            color: #000;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #333; }
+        th { color: #888; font-size: 0.75rem; text-transform: uppercase; }
+        .empty { text-align: center; padding: 2rem; color: #666; }
+        .footer { text-align: center; padding: 2rem 0; color: #666; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <h1>📈 Trading Dashboard</h1>
+            <div class="strategy-tag">Gold 93% Win Rate Strategy</div>
+        </div>
+        <div class="status">
+            <div class="pulse"></div>
+            <span id="status">LIVE</span>
+            <span id="time">--:--:--</span>
+        </div>
+    </div>
+    
+    <div class="info-banner">
+        <div class="info-item">
+            <label>Segment</label>
+            <span>EQUITY</span>
+        </div>
+        <div class="info-item">
+            <label>Exchange</label>
+            <span>NSE</span>
+        </div>
+        <div class="info-item">
+            <label>Product</label>
+            <span>MIS Intraday</span>
+        </div>
+        <div class="info-item">
+            <label>Leverage</label>
+            <span>5x</span>
+        </div>
+        <div class="info-item">
+            <label>Broker</label>
+            <span>Angel One</span>
+        </div>
+        <div class="info-item">
+            <label>Strategy</label>
+            <span>RSI + Stoch + CCI + MACD</span>
+        </div>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Capital</h3>
+            <div class="value" id="capital">₹10,000</div>
+        </div>
+        <div class="stat-card">
+            <h3>Today's P&L</h3>
+            <div class="value profit" id="pnl">+₹0</div>
+        </div>
+        <div class="stat-card">
+            <h3>Watchlist</h3>
+            <div class="value" id="watchlist-count">0</div>
+        </div>
+        <div class="stat-card">
+            <h3>Open Positions</h3>
+            <div class="value" id="positions-count">0</div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>📋 Smart Watchlist <span class="badge" id="wl-badge">0</span></h2>
+        <table>
+            <thead>
+                <tr><th>Stock</th><th>Win Rate</th><th>Expected P&L</th></tr>
+            </thead>
+            <tbody id="watchlist-body">
+                <tr><td colspan="3" class="empty">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="footer">
+        <p>🤖 Gold 93% Win Rate Strategy | EQUITY | NSE | MIS Intraday | Angel One</p>
+        <p>Last Update: <span id="last-update">--</span></p>
+    </div>
+    
+    <script>
+        function updateTime() {
+            document.getElementById('time').textContent = 
+                new Date().toLocaleTimeString('en-IN', {hour12: false, timeZone: 'Asia/Kolkata'}) + ' IST';
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                
+                document.getElementById('capital').textContent = '₹' + (data.capital || 10000).toLocaleString();
+                document.getElementById('pnl').textContent = '+₹' + (data.daily_pnl || 0);
+                document.getElementById('watchlist-count').textContent = (data.watchlist || []).length;
+                document.getElementById('positions-count').textContent = Object.keys(data.positions || {}).length;
+                document.getElementById('wl-badge').textContent = (data.watchlist || []).length;
+                
+                const tbody = document.getElementById('watchlist-body');
+                const wl = data.watchlist || [];
+                
+                if (wl.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="empty">No stocks in watchlist</td></tr>';
+                } else {
+                    tbody.innerHTML = wl.slice(0, 10).map(s => `
+                        <tr>
+                            <td>${s.symbol || s.name}</td>
+                            <td style="color: #00ff88">${(s.win_rate || 0).toFixed(1)}%</td>
+                            <td style="color: #00ff88">+₹${(s.expected_pnl || 0).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+                }
+                
+                document.getElementById('last-update').textContent = 
+                    new Date().toLocaleTimeString('en-IN', {hour12: false});
+            } catch(e) {
+                console.error(e);
+            }
+        }
+        
+        fetchData();
+        setInterval(fetchData, 10000);
+    </script>
+</body>
+</html>
 """
-                    send_telegram_message(msg)
-                except Exception as e:
-                    logger.warning(f"Telegram notification failed: {e}")
-            
-            return qualified
-            
-        except Exception as e:
-            logger.error(f"Stock scan failed: {e}")
-            return None
-    
-    def start_dashboard(self):
-        """Start the web dashboard"""
-        try:
-            from dashboard import run_dashboard
-            port = int(os.environ.get('PORT', 5050))
-            run_dashboard(port)
-        except Exception as e:
-            logger.error(f"Dashboard error: {e}")
-            # Fallback to simple dashboard
+
+
+@app.route('/')
+def index():
+    return render_template_string(DASHBOARD_HTML)
+
+
+@app.route('/api/dashboard')
+def api_dashboard():
+    return jsonify(get_dashboard_data())
+
+
+@app.route('/api/health')
+def api_health():
+    return jsonify({
+        'status': 'ok',
+        'strategy': 'Gold 93% Win Rate',
+        'segment': 'EQUITY',
+        'exchange': 'NSE',
+        'broker': 'Angel One'
+    })
+
+
+@app.route('/api/watchlist')
+def api_watchlist():
+    try:
+        with open("config/smart_watchlist.json", 'r') as f:
+            return jsonify(json.load(f))
+    except:
+        return jsonify({'active_stocks': []})
+
+
+def run_stock_bot():
+    """Run stock trading bot in background"""
+    try:
+        import schedule
+        from stock_trading_bot import StockTradingBot
+        
+        logger.info("📈 Starting stock bot in background...")
+        bot = StockTradingBot()
+        bot.run()
+    except Exception as e:
+        logger.error(f"Stock bot error: {e}")
+
+
+def run_scheduler():
+    """Run weekly scheduler"""
+    try:
+        import schedule
+        
+        # Weekly scan on Monday
+        def weekly_scan():
             try:
-                from flask import Flask, jsonify
-                
-                app = Flask(__name__)
-                
-                @app.route('/')
-                def home():
-                    return """
-                    <html>
-                    <head><title>Trading Bot Dashboard</title></head>
-                    <body style="font-family:Arial; padding:20px; background:#1e1e1e; color:#fff;">
-                        <h1>📈 Trading Bot Dashboard</h1>
-                        <p>Bot Status: 🟢 Running</p>
-                        <p>View <a href="/api/status" style="color:#00ff00;">API Status</a></p>
-                        <p>View <a href="/api/watchlist" style="color:#00ff00;">Watchlist</a></p>
-                    </body>
-                    </html>
-                    """
-                
-                port = int(os.environ.get('PORT', 5050))
-                logger.info(f"🌐 Fallback dashboard on port {port}")
-                app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-                
-            except Exception as fallback_error:
-                logger.error(f"Fallback dashboard also failed: {fallback_error}")
-    
-    def is_trading_hours(self):
-        """Check if within trading hours"""
-        now = datetime.now(IST)
-        
-        # Skip weekends
-        if now.weekday() >= 5:
-            return False
-        
-        # Market hours: 9:15 AM - 3:30 PM
-        market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
-        market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
-        
-        return market_open <= now <= market_close
-    
-    def is_scan_time(self):
-        """Check if it's time for weekly scan (Monday 8 AM)"""
-        now = datetime.now(IST)
-        return now.weekday() == 0 and 7 <= now.hour <= 9
-    
-    def start_stock_bot(self):
-        """Start the stock trading bot"""
-        try:
-            from stock_trading_bot import StockTradingBot
-            
-            bot = StockTradingBot()
-            bot.run()
-            
-        except Exception as e:
-            logger.error(f"Stock bot error: {e}")
-    
-    def run_scheduled_tasks(self):
-        """Run scheduled tasks"""
-        # Weekly stock scan - Monday 8 AM
-        schedule.every().monday.at("08:00").do(self.run_stock_scan)
-        
-        # Daily health check
-        schedule.every().day.at("09:00").do(self.health_check)
-        
-        while self.is_running:
-            try:
-                schedule.run_pending()
-                time.sleep(30)
+                from smart_stock_selector import run_smart_selector
+                logger.info("🔍 Running weekly stock scan...")
+                run_smart_selector(capital=10000, min_win_rate=80, leverage=5)
             except Exception as e:
-                logger.error(f"Scheduler error: {e}")
-                time.sleep(60)
-    
-    def health_check(self):
-        """Daily health check"""
-        now = datetime.now(IST)
-        logger.info(f"💓 Health check at {now.strftime('%Y-%m-%d %H:%M')}")
+                logger.error(f"Scan error: {e}")
         
-        # Check watchlist
-        self.check_watchlist_exists()
+        schedule.every().monday.at("08:00").do(weekly_scan)
         
-        # Send Telegram ping
-        try:
-            from utils.notifications import send_telegram_message
-            send_telegram_message(f"💓 Bot health check OK at {now.strftime('%H:%M')}")
-        except:
-            pass
-    
-    def run(self, stock_only=False, scan_now=False):
-        """Main run method"""
-        logger.info("="*60)
-        logger.info("🚀 UNIFIED TRADING BOT STARTING")
-        logger.info("="*60)
-        
-        now = datetime.now(IST)
-        logger.info(f"⏰ Current Time: {now.strftime('%Y-%m-%d %H:%M:%S')} IST")
-        
-        # Send startup message
-        try:
-            from utils.notifications import send_telegram_message
-            send_telegram_message(f"""
-🚀 *TRADING BOT STARTED*
-
-Time: {now.strftime('%Y-%m-%d %H:%M')} IST
-Mode: {'Stock Only' if stock_only else 'Full Pipeline'}
-
-Components:
-• Weekly Scanner: ✅
-• Stock Bot: ✅
-• Dashboard: ✅
-• Telegram: ✅
-""")
-        except Exception as e:
-            logger.warning(f"Telegram notification failed: {e}")
-        
-        self.is_running = True
-        
-        # Run immediate scan if requested
-        if scan_now:
-            logger.info("📋 Running immediate stock scan...")
-            self.run_stock_scan()
-        
-        # Check and create watchlist if needed
-        self.check_watchlist_exists()
-        
-        # Start stock bot in background thread
-        self.stock_bot_thread = threading.Thread(target=self.start_stock_bot, daemon=True)
-        self.stock_bot_thread.start()
-        logger.info("📈 Stock bot thread started")
-        
-        # Start scheduler in background
-        scheduler_thread = threading.Thread(target=self.run_scheduled_tasks, daemon=True)
-        scheduler_thread.start()
-        logger.info("📅 Scheduler thread started")
-        
-        # Give threads time to start
-        time.sleep(2)
-        
-        # Run dashboard in MAIN thread (required for Railway PORT binding)
-        logger.info("🌐 Starting dashboard in main thread...")
-        self.start_dashboard()
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    except Exception as e:
+        logger.error(f"Scheduler error: {e}")
 
 
 def main():
-    """Entry point"""
-    import argparse
+    """Main entry point"""
+    logger.info("="*50)
+    logger.info("🚀 RAILWAY TRADING BOT STARTING")
+    logger.info(f"📊 Strategy: Gold 93% Win Rate")
+    logger.info(f"📈 Segment: EQUITY | Exchange: NSE")
+    logger.info("="*50)
     
-    parser = argparse.ArgumentParser(description='Unified Trading Bot')
-    parser.add_argument('--stock-only', action='store_true', help='Run only stock bot')
-    parser.add_argument('--scan-now', action='store_true', help='Run stock scan immediately')
-    parser.add_argument('--scan-only', action='store_true', help='Just run scan and exit')
+    # Send startup notification
+    try:
+        from utils.notifications import send_telegram_message
+        now = datetime.now(IST)
+        send_telegram_message(f"""
+🚀 *TRADING BOT STARTED*
+
+Strategy: Gold 93% Win Rate
+Segment: EQUITY | Exchange: NSE
+Product: MIS Intraday
+Broker: Angel One
+
+Time: {now.strftime('%Y-%m-%d %H:%M')} IST
+""")
+    except:
+        pass
     
-    args = parser.parse_args()
+    # Start stock bot in background
+    bot_thread = threading.Thread(target=run_stock_bot, daemon=True)
+    bot_thread.start()
+    logger.info("📈 Stock bot thread started")
     
-    if args.scan_only:
-        # Just run scan and exit
-        pipeline = TradingPipeline()
-        pipeline.run_stock_scan()
-        return
+    # Start scheduler in background
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+    logger.info("📅 Scheduler thread started")
     
-    # Run full pipeline
-    pipeline = TradingPipeline()
-    pipeline.run(stock_only=args.stock_only, scan_now=args.scan_now)
+    # Run Flask in main thread (required for Railway PORT)
+    port = int(os.environ.get('PORT', 5050))
+    logger.info(f"🌐 Dashboard starting on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
