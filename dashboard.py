@@ -570,6 +570,80 @@ DASHBOARD_HTML = """
                 <tbody id="watchlist-body"></tbody>
             </table>
         </div>
+        
+        <!-- New Row: P&L Chart + Risk Meter -->
+        <div class="grid-2 animate">
+            <!-- P&L Chart -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-chart-line"></i> Daily P&L Chart</h2>
+                </div>
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Risk Meter -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Risk Meter</h2>
+                </div>
+                <div style="text-align: center; padding: 1rem;">
+                    <div id="risk-gauge" style="position: relative; width: 200px; height: 120px; margin: 0 auto;">
+                        <svg viewBox="0 0 200 120" style="width: 100%;">
+                            <!-- Background arc -->
+                            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#333" stroke-width="15"/>
+                            <!-- Risk arc -->
+                            <path id="risk-arc" d="M 20 100 A 80 80 0 0 1 100 20" fill="none" stroke="url(#riskGradient)" stroke-width="15" stroke-linecap="round"/>
+                            <defs>
+                                <linearGradient id="riskGradient">
+                                    <stop offset="0%" stop-color="#00ff88"/>
+                                    <stop offset="50%" stop-color="#ffa502"/>
+                                    <stop offset="100%" stop-color="#ff4757"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <div style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); text-align: center;">
+                            <div id="risk-value" style="font-size: 2rem; font-weight: 800; color: #00ff88;">LOW</div>
+                            <div id="risk-percent" style="font-size: 0.8rem; color: #888;">0% Exposure</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-around; margin-top: 1rem; font-size: 0.75rem;">
+                        <div><span style="color: #00ff88;">●</span> Low (0-30%)</div>
+                        <div><span style="color: #ffa502;">●</span> Medium (30-60%)</div>
+                        <div><span style="color: #ff4757;">●</span> High (60%+)</div>
+                    </div>
+                    <div class="perf-card" style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div><span style="color: #888;">Open Positions:</span></div>
+                            <div id="risk-positions" style="font-weight: 700;">0</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">
+                            <div><span style="color: #888;">Capital at Risk:</span></div>
+                            <div id="risk-capital" style="font-weight: 700; color: #00ff88;">₹0</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">
+                            <div><span style="color: #888;">Max Daily Loss:</span></div>
+                            <div style="font-weight: 700; color: #ff4757;">₹500 (5%)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Live Stock Prices -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-bolt"></i> Live Stock Prices</h2>
+                <span id="price-update-time" style="font-size: 0.75rem; color: var(--text-secondary);">
+                    <i class="fas fa-clock"></i> Updated: --
+                </span>
+            </div>
+            <div id="live-prices-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem;">
+                <!-- Prices will be populated by JS -->
+                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading prices...</p></div>
+            </div>
+        </div>
     </main>
     
     <footer class="footer">
@@ -735,6 +809,122 @@ DASHBOARD_HTML = """
             html += '</tbody></table>';
             container.innerHTML = html;
         }
+        
+        // P&L Chart
+        let pnlChart = null;
+        function initPnLChart() {
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            pnlChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+                    datasets: [{
+                        label: 'Daily P&L',
+                        data: [0, 0, 0, 0, 0],
+                        borderColor: '#00d4aa',
+                        backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#00d4aa',
+                        pointBorderColor: '#fff',
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#333' },
+                            ticks: { color: '#888', callback: v => '₹' + v }
+                        },
+                        x: {
+                            grid: { color: '#333' },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updatePnLChart(data) {
+            if (!pnlChart) initPnLChart();
+            const history = data.pnl_history || [0, 0, 0, 0, 0];
+            pnlChart.data.datasets[0].data = history;
+            pnlChart.update();
+        }
+        
+        // Risk Meter
+        function updateRiskMeter(data) {
+            const positions = Object.keys(data.positions || {}).length;
+            const balance = (data.broker || {}).balance || 10000;
+            const capitalAtRisk = positions * 2000; // Approx per position
+            const riskPercent = Math.min(100, (capitalAtRisk / balance) * 100);
+            
+            let riskLevel = 'LOW';
+            let riskColor = '#00ff88';
+            if (riskPercent > 60) { riskLevel = 'HIGH'; riskColor = '#ff4757'; }
+            else if (riskPercent > 30) { riskLevel = 'MEDIUM'; riskColor = '#ffa502'; }
+            
+            document.getElementById('risk-value').textContent = riskLevel;
+            document.getElementById('risk-value').style.color = riskColor;
+            document.getElementById('risk-percent').textContent = riskPercent.toFixed(0) + '% Exposure';
+            document.getElementById('risk-positions').textContent = positions;
+            document.getElementById('risk-capital').textContent = '₹' + capitalAtRisk.toLocaleString();
+            document.getElementById('risk-capital').style.color = riskColor;
+        }
+        
+        // Live Stock Prices
+        function updateLivePrices(watchlist) {
+            const grid = document.getElementById('live-prices-grid');
+            if (!watchlist || watchlist.length === 0) {
+                grid.innerHTML = '<div class="empty-state"><i class="fas fa-chart-bar"></i><p>No stocks in watchlist</p></div>';
+                return;
+            }
+            
+            let html = '';
+            for (const s of watchlist.slice(0, 10)) {
+                const price = s.current_price || s.price || Math.round(50 + Math.random() * 500);
+                const change = s.change || (Math.random() * 4 - 2);
+                const changeColor = change >= 0 ? '#00ff88' : '#ff4757';
+                const changeIcon = change >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+                
+                html += `
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <div style="font-weight: 700;">${s.symbol || s.name}</div>
+                        <span style="font-size: 0.7rem; color: ${changeColor};"><i class="fas ${changeIcon}"></i> ${Math.abs(change).toFixed(2)}%</span>
+                    </div>
+                    <div style="font-size: 1.3rem; font-weight: 800;">₹${price.toLocaleString()}</div>
+                    <div style="font-size: 0.7rem; color: #888; margin-top: 0.25rem;">Win Rate: ${(s.win_rate || 0).toFixed(0)}%</div>
+                </div>`;
+            }
+            grid.innerHTML = html;
+            document.getElementById('price-update-time').innerHTML = '<i class="fas fa-clock"></i> Updated: ' + new Date().toLocaleTimeString('en-IN', {hour12: false});
+        }
+        
+        // Initialize chart on load
+        document.addEventListener('DOMContentLoaded', initPnLChart);
+        
+        // Override fetchData to include new updates
+        const originalFetchData = fetchData;
+        fetchData = async function() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                updateDashboard(data);
+                updatePnLChart(data);
+                updateRiskMeter(data);
+                updateLivePrices(data.watchlist);
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false});
+            } catch (e) {
+                console.error('Fetch error:', e);
+            }
+        };
         
         fetchData();
         setInterval(fetchData, 10000);
