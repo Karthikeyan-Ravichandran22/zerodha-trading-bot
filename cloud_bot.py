@@ -38,8 +38,9 @@ from utils.pro_trading import (
 from utils.notifications import send_trade_alert, send_exit_alert, send_daily_summary
 from utils.position_manager import position_manager
 from utils.trade_journal import trade_journal
-from utils.dashboard import dashboard
 from utils.capital_manager import capital_manager
+
+# Dashboard removed - using new dashboard.py instead
 
 
 class CloudTradingBot:
@@ -685,22 +686,25 @@ class CloudTradingBot:
             # Get stats from trade journal
             journal_stats = trade_journal.get_today_stats()
             
-            # Display performance dashboard
-            dashboard.display_daily(journal_stats)
-            
             # Save to database
             trade_journal.save_daily_summary()
             
             # Send Telegram summary
             try:
                 from utils.notifications import send_telegram_message
-                telegram_msg = dashboard.get_telegram_summary(journal_stats)
-                send_telegram_message(telegram_msg)
+                msg = f"""📊 DAILY SUMMARY
+
+Trades: {journal_stats.get('total_trades', len(self.today_trades))}
+Gross P&L: ₹{self.today_pnl:+,.2f}
+Charges: ₹{self.today_charges:.2f}
+NET P&L: ₹{net_pnl:+,.2f}
+"""
+                send_telegram_message(msg)
             except:
                 pass
                 
         except Exception as e:
-            logger.debug(f"Dashboard failed: {e}")
+            logger.debug(f"Summary failed: {e}")
             # Fallback to basic summary
             stats = {
                 'trades': len(self.today_trades),
