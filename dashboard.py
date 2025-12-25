@@ -466,10 +466,10 @@ DASHBOARD_HTML = """
         <!-- Stats Grid -->
         <div class="stats-grid animate">
             <div class="stat-card green">
-                <div class="stat-icon green"><i class="fas fa-wallet"></i></div>
-                <div class="stat-label">Capital</div>
-                <div class="stat-value" id="capital">₹10,000</div>
-                <div class="stat-sub up"><i class="fas fa-arrow-up"></i> 5x = ₹50,000</div>
+                <div class="stat-icon green"><i class="fas fa-university"></i></div>
+                <div class="stat-label">Angel One Balance</div>
+                <div class="stat-value" id="capital">Loading...</div>
+                <div class="stat-sub" id="broker-user"><i class="fas fa-user"></i> Connecting...</div>
             </div>
             <div class="stat-card green">
                 <div class="stat-icon green"><i class="fas fa-rupee-sign"></i></div>
@@ -622,13 +622,21 @@ DASHBOARD_HTML = """
         }
         
         function updateDashboard(data) {
-            const capital = data.capital || 10000;
-            document.getElementById('capital').textContent = formatCurrency(capital);
+            // Show Angel One balance
+            const broker = data.broker || {};
+            const balance = broker.balance || data.capital || 0;
+            const userName = broker.user_name || 'Not Connected';
+            const isConnected = broker.is_authenticated || false;
+            
+            document.getElementById('capital').textContent = formatCurrency(balance);
+            document.getElementById('broker-user').innerHTML = isConnected 
+                ? '<i class="fas fa-check-circle" style="color:#00ff88"></i> ' + userName
+                : '<i class="fas fa-times-circle" style="color:#ff4757"></i> ' + userName;
             
             const todayPnl = data.daily_pnl || 0;
             document.getElementById('today-pnl').textContent = formatPnL(todayPnl);
             document.getElementById('today-pnl').className = 'stat-value ' + (todayPnl >= 0 ? 'profit' : 'loss');
-            document.getElementById('today-roi').textContent = ((todayPnl / capital) * 100).toFixed(1) + '% ROI';
+            document.getElementById('today-roi').textContent = ((todayPnl / (balance || 10000)) * 100).toFixed(1) + '% ROI';
             
             // Week/Month stats from analytics
             if (data.analytics) {
@@ -797,6 +805,21 @@ def get_dashboard_data():
             'all_time': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0, 'profit_factor': 0},
             'top_stocks': []
         }
+    
+    # Load broker (Angel One) balance
+    try:
+        if os.path.exists("data/zerodha_status.json"):
+            with open("data/zerodha_status.json", 'r') as f:
+                broker_data = json.load(f)
+                data['broker'] = {
+                    'balance': broker_data.get('balance', 0),
+                    'user_name': broker_data.get('user_name', 'Not Connected'),
+                    'is_authenticated': broker_data.get('is_authenticated', False),
+                    'broker_name': broker_data.get('broker', 'Angel One'),
+                    'last_updated': broker_data.get('last_updated', '')
+                }
+    except:
+        data['broker'] = {'balance': 0, 'user_name': 'Not Connected', 'is_authenticated': False}
     
     return data
 
