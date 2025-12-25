@@ -882,8 +882,51 @@ NET P&L: ₹{net_pnl:+,.2f}
 
 
 def start_dashboard():
-    """Start the web dashboard in a separate thread"""
+    """Start the premium web dashboard"""
     try:
+        # Use the premium dashboard module
+        from dashboard import app, get_dashboard_data, DASHBOARD_HTML
+        from flask import render_template_string, jsonify
+        import json
+        
+        # Add API endpoint for cloud_bot status
+        @app.route('/api/status')
+        def api_status():
+            # Read data from saved files
+            capital = {'current_capital': 10000, 'total_pnl': 0, 'high_water_mark': 10000, 'growth_percent': 0}
+            zerodha = {'balance': 0, 'user_name': 'Not Connected', 'is_authenticated': False}
+            
+            try:
+                if os.path.exists('data/capital_config.json'):
+                    with open('data/capital_config.json', 'r') as f:
+                        data = json.load(f)
+                        capital['current_capital'] = data.get('current_capital', 10000)
+                        capital['total_pnl'] = data.get('total_pnl', 0)
+            except:
+                pass
+            
+            try:
+                if os.path.exists('data/zerodha_status.json'):
+                    with open('data/zerodha_status.json', 'r') as f:
+                        zerodha = json.load(f)
+            except:
+                pass
+            
+            return jsonify({
+                'timestamp': datetime.now().isoformat(),
+                'capital': capital,
+                'zerodha': zerodha,
+                'bot_status': 'running',
+                'strategy': 'Gold 93% Win Rate'
+            })
+        
+        port = int(os.environ.get('PORT', 5050))
+        logger.info(f"🌐 Starting PREMIUM dashboard on port {port}...")
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+        
+    except Exception as e:
+        logger.warning(f"Premium dashboard failed: {e}, using fallback...")
+        # Fallback to simple dashboard
         from flask import Flask, render_template_string, jsonify
         import json
         
@@ -893,17 +936,85 @@ def start_dashboard():
 <!DOCTYPE html>
 <html>
 <head>
-    <title>📈 Trading Dashboard</title>
+    <title>📈 Gold 93% Win Rate - Trading Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial; background: #1a1a2e; color: #fff; padding: 20px; }
-        h1 { color: #00ff88; }
-        .card { background: rgba(255,255,255,0.1); padding: 20px; margin: 10px 0; border-radius: 8px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%); color: #fff; min-height: 100vh; padding: 2rem; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #333; }
+        .logo h1 { font-size: 1.8rem; background: linear-gradient(135deg, #00d4aa, #667eea); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .strategy-tag { background: rgba(0, 212, 170, 0.2); color: #00d4aa; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.9rem; font-weight: 600; margin-top: 0.5rem; }
+        .status { display: flex; align-items: center; gap: 0.5rem; color: #00ff88; }
+        .pulse { width: 10px; height: 10px; background: #00ff88; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .info-banner { background: rgba(0, 212, 170, 0.1); border: 1px solid #333; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; display: flex; flex-wrap: wrap; gap: 2rem; }
+        .info-item label { font-size: 0.75rem; color: #888; text-transform: uppercase; display: block; margin-bottom: 0.3rem; }
+        .info-item span { font-weight: 600; color: #00d4aa; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 12px; padding: 1.5rem; }
+        .stat-card h3 { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+        .stat-card .value { font-size: 1.8rem; font-weight: 700; }
+        .stat-card .value.profit { color: #00ff88; }
+        .section { background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section h2 { font-size: 1.1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .badge { background: #00d4aa; color: #000; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.75rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #333; }
+        th { color: #888; font-size: 0.75rem; text-transform: uppercase; }
+        .empty { text-align: center; padding: 2rem; color: #666; }
+        .footer { text-align: center; padding: 2rem 0; color: #666; font-size: 0.85rem; }
     </style>
 </head>
 <body>
-    <h1>📈 Trading Bot Dashboard</h1>
-    <div class="card"><strong>Status:</strong> 🟢 Running</div>
-    <div class="card"><strong>API:</strong> <a href="/api/status" style="color:#00ff88">/api/status</a></div>
+    <div class="header">
+        <div class="logo">
+            <h1>📈 Trading Dashboard</h1>
+            <div class="strategy-tag">Gold 93% Win Rate Strategy</div>
+        </div>
+        <div class="status"><div class="pulse"></div><span id="status">LIVE</span><span id="time">--:--:--</span></div>
+    </div>
+    <div class="info-banner">
+        <div class="info-item"><label>Segment</label><span>EQUITY</span></div>
+        <div class="info-item"><label>Exchange</label><span>NSE</span></div>
+        <div class="info-item"><label>Product</label><span>MIS Intraday</span></div>
+        <div class="info-item"><label>Leverage</label><span>5x</span></div>
+        <div class="info-item"><label>Broker</label><span>Angel One</span></div>
+        <div class="info-item"><label>Strategy</label><span>RSI + Stoch + CCI + MACD</span></div>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card"><h3>Capital</h3><div class="value" id="capital">₹10,000</div></div>
+        <div class="stat-card"><h3>Today's P&L</h3><div class="value profit" id="pnl">+₹0</div></div>
+        <div class="stat-card"><h3>Watchlist</h3><div class="value" id="watchlist-count">0</div></div>
+        <div class="stat-card"><h3>Open Positions</h3><div class="value" id="positions-count">0</div></div>
+    </div>
+    <div class="section">
+        <h2>📋 Smart Watchlist <span class="badge" id="wl-badge">0</span></h2>
+        <table><thead><tr><th>Stock</th><th>Win Rate</th><th>Expected P&L</th></tr></thead><tbody id="watchlist-body"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody></table>
+    </div>
+    <div class="footer"><p>🤖 Gold 93% Win Rate Strategy | EQUITY | NSE | MIS Intraday | Angel One</p><p>Last Update: <span id="last-update">--</span></p></div>
+    <script>
+        function updateTime() { document.getElementById('time').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false, timeZone: 'Asia/Kolkata'}) + ' IST'; }
+        setInterval(updateTime, 1000); updateTime();
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                document.getElementById('capital').textContent = '₹' + (data.capital || 10000).toLocaleString();
+                document.getElementById('pnl').textContent = '+₹' + (data.daily_pnl || 0);
+                document.getElementById('watchlist-count').textContent = (data.watchlist || []).length;
+                document.getElementById('positions-count').textContent = Object.keys(data.positions || {}).length;
+                document.getElementById('wl-badge').textContent = (data.watchlist || []).length;
+                const tbody = document.getElementById('watchlist-body');
+                const wl = data.watchlist || [];
+                if (wl.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="empty">No stocks in watchlist</td></tr>'; }
+                else { tbody.innerHTML = wl.slice(0, 10).map(s => `<tr><td>${s.symbol || s.name}</td><td style="color: #00ff88">${(s.win_rate || 0).toFixed(1)}%</td><td style="color: #00ff88">+₹${(s.expected_pnl || 0).toLocaleString()}</td></tr>`).join(''); }
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false});
+            } catch(e) { console.error(e); }
+        }
+        fetchData(); setInterval(fetchData, 10000);
+    </script>
 </body>
 </html>
 """
@@ -911,6 +1022,23 @@ def start_dashboard():
         @app.route('/')
         def dashboard():
             return render_template_string(SIMPLE_DASHBOARD)
+        
+        @app.route('/api/dashboard')
+        def api_dashboard():
+            data = {'capital': 10000, 'daily_pnl': 0, 'watchlist': [], 'positions': {}}
+            try:
+                if os.path.exists('config/smart_watchlist.json'):
+                    with open('config/smart_watchlist.json', 'r') as f:
+                        wl = json.load(f)
+                        data['watchlist'] = wl.get('active_stocks', [])
+                        data['capital'] = wl.get('capital', 10000)
+            except: pass
+            try:
+                if os.path.exists('data/stock_positions.json'):
+                    with open('data/stock_positions.json', 'r') as f:
+                        data['positions'] = json.load(f)
+            except: pass
+            return jsonify(data)
         
         @app.route('/api/status')
         def api_status():
