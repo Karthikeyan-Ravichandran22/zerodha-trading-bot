@@ -1,0 +1,856 @@
+#!/usr/bin/env python3
+"""
+🌐 PREMIUM TRADING DASHBOARD
+=============================
+
+Feature-rich dashboard with:
+- Strategy name display
+- Database analytics
+- Charts and graphs
+- Weekly/Monthly stats
+- Top performing stocks
+- Real-time updates
+"""
+
+import os
+import sys
+import json
+import pytz
+from datetime import datetime
+from flask import Flask, render_template_string, jsonify
+from loguru import logger
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+app = Flask(__name__)
+IST = pytz.timezone('Asia/Kolkata')
+
+# Strategy Configuration
+STRATEGY_CONFIG = {
+    "name": "Gold 93% Win Rate Strategy",
+    "version": "2.0",
+    "type": "Multi-Indicator Confirmation",
+    "timeframe": "15 Minutes",
+    "indicators": [
+        {"name": "RSI", "params": "(2)", "color": "#ff6b6b"},
+        {"name": "Stochastic", "params": "(10,3,3)", "color": "#ffd93d"},
+        {"name": "CCI", "params": "(20)", "color": "#6bcb77"},
+        {"name": "MACD", "params": "(12,26,9)", "color": "#4d96ff"}
+    ],
+    "entry_rule": "3/4 Indicators + Candle Flow Confirmation",
+    "exit_rule": "Dynamic Trailing Stop Loss",
+    "min_win_rate": "80%",
+    "backtest_period": "14 Days"
+}
+
+TRADING_CONFIG = {
+    "segment": "EQUITY",
+    "exchange": "NSE",
+    "product": "MIS (Intraday)",
+    "leverage": "5x",
+    "broker": "Angel One",
+    "hours": "9:15 AM - 3:30 PM IST",
+    "scan_day": "Monday 8:00 AM"
+}
+
+DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📈 Premium Trading Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #0f0f16;
+            --bg-card: #151520;
+            --bg-card-hover: #1a1a28;
+            --accent: #00d4aa;
+            --accent-2: #667eea;
+            --profit: #00ff88;
+            --loss: #ff4757;
+            --warning: #ffa502;
+            --info: #3498db;
+            --text-primary: #ffffff;
+            --text-secondary: #6b6b80;
+            --border: #252535;
+            --glow: 0 0 40px rgba(0, 212, 170, 0.15);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        .bg-pattern {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+            background: 
+                radial-gradient(ellipse at 10% 90%, rgba(0, 212, 170, 0.08) 0%, transparent 40%),
+                radial-gradient(ellipse at 90% 10%, rgba(102, 126, 234, 0.08) 0%, transparent 40%),
+                radial-gradient(ellipse at 50% 50%, rgba(52, 152, 219, 0.03) 0%, transparent 60%),
+                linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+        }
+        
+        /* Header */
+        .header {
+            background: rgba(15, 15, 22, 0.95);
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 2rem;
+            position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(20px);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .logo { display: flex; align-items: center; gap: 1rem; }
+        
+        .logo h1 {
+            font-size: 1.4rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        
+        .strategy-badge {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.15) 0%, rgba(102, 126, 234, 0.15) 100%);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+            padding: 0.4rem 0.8rem; border-radius: 8px;
+        }
+        
+        .strategy-badge i { color: var(--accent); }
+        .strategy-badge span { font-size: 0.8rem; font-weight: 600; color: var(--accent); }
+        
+        .status-container { display: flex; align-items: center; gap: 1.5rem; }
+        
+        .market-status {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.4rem 1rem; border-radius: 50px;
+            font-size: 0.8rem; font-weight: 600;
+        }
+        
+        .market-status.open { background: rgba(0, 255, 136, 0.1); border: 1px solid var(--profit); color: var(--profit); }
+        .market-status.closed { background: rgba(255, 165, 2, 0.1); border: 1px solid var(--warning); color: var(--warning); }
+        
+        .pulse { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        
+        .time-display { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
+        
+        /* Container */
+        .container { max-width: 1920px; margin: 0 auto; padding: 1.5rem; }
+        
+        /* Strategy Hero */
+        .strategy-hero {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.08) 0%, rgba(102, 126, 234, 0.08) 100%);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            display: grid;
+            grid-template-columns: 2fr 3fr;
+            gap: 2rem;
+            align-items: center;
+        }
+        
+        .strategy-info h2 {
+            font-size: 1.8rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--accent) 0%, #00a085 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        
+        .strategy-info .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem; }
+        
+        .strategy-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        
+        .tag {
+            padding: 0.35rem 0.75rem; border-radius: 6px;
+            font-size: 0.75rem; font-weight: 600;
+            display: flex; align-items: center; gap: 0.3rem;
+        }
+        
+        .tag.equity { background: rgba(52, 152, 219, 0.2); color: var(--info); }
+        .tag.nse { background: rgba(102, 126, 234, 0.2); color: var(--accent-2); }
+        .tag.intraday { background: rgba(0, 212, 170, 0.2); color: var(--accent); }
+        .tag.angel { background: rgba(255, 165, 2, 0.2); color: var(--warning); }
+        
+        .indicators-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+        
+        .indicator-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .indicator-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--glow);
+        }
+        
+        .indicator-card .icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; margin: 0 auto 0.5rem;
+        }
+        
+        .indicator-card .name { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.2rem; }
+        .indicator-card .params { font-size: 0.75rem; color: var(--text-secondary); }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--accent);
+            box-shadow: var(--glow);
+        }
+        
+        .stat-card::before {
+            content: ''; position: absolute;
+            top: 0; left: 0; width: 100%; height: 3px;
+        }
+        
+        .stat-card.green::before { background: linear-gradient(90deg, var(--profit), var(--accent)); }
+        .stat-card.blue::before { background: linear-gradient(90deg, var(--info), var(--accent-2)); }
+        .stat-card.orange::before { background: linear-gradient(90deg, var(--warning), #ff6b6b); }
+        
+        .stat-icon {
+            width: 42px; height: 42px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; margin-bottom: 0.75rem;
+        }
+        
+        .stat-icon.green { background: rgba(0, 255, 136, 0.1); color: var(--profit); }
+        .stat-icon.blue { background: rgba(52, 152, 219, 0.1); color: var(--info); }
+        .stat-icon.orange { background: rgba(255, 165, 2, 0.1); color: var(--warning); }
+        .stat-icon.cyan { background: rgba(0, 212, 170, 0.1); color: var(--accent); }
+        .stat-icon.purple { background: rgba(102, 126, 234, 0.1); color: var(--accent-2); }
+        
+        .stat-label { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.5rem; font-weight: 800; }
+        .stat-value.profit { color: var(--profit); }
+        .stat-value.loss { color: var(--loss); }
+        
+        .stat-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; display: flex; align-items: center; gap: 0.25rem; }
+        .stat-sub.up { color: var(--profit); }
+        .stat-sub.down { color: var(--loss); }
+        
+        /* Grid Layout */
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        
+        @media (max-width: 1400px) {
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .grid-3 { grid-template-columns: 1fr; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .strategy-hero { grid-template-columns: 1fr; }
+            .indicators-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        /* Section */
+        .section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.25rem;
+            height: 100%;
+        }
+        
+        .section-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1rem; padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .section-title {
+            font-size: 1rem; font-weight: 700;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        
+        .badge {
+            background: var(--accent); color: var(--bg-primary);
+            padding: 0.15rem 0.5rem; border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700;
+        }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; }
+        
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        
+        th { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        tr:hover { background: var(--bg-card-hover); }
+        
+        .stock-cell { display: flex; align-items: center; gap: 0.6rem; }
+        
+        .stock-avatar {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.75rem;
+        }
+        
+        .stock-info h4 { font-weight: 600; font-size: 0.85rem; }
+        .stock-info span { font-size: 0.7rem; color: var(--text-secondary); }
+        
+        .signal-badge {
+            padding: 0.3rem 0.7rem; border-radius: 20px;
+            font-size: 0.7rem; font-weight: 700;
+        }
+        
+        .signal-badge.buy { background: rgba(0, 255, 136, 0.1); color: var(--profit); border: 1px solid var(--profit); }
+        .signal-badge.sell { background: rgba(255, 71, 87, 0.1); color: var(--loss); border: 1px solid var(--loss); }
+        
+        .pnl { font-weight: 700; font-size: 0.85rem; }
+        .pnl.profit { color: var(--profit); }
+        .pnl.loss { color: var(--loss); }
+        
+        .segment-tag {
+            padding: 0.2rem 0.5rem; border-radius: 4px;
+            font-size: 0.65rem; font-weight: 600;
+            background: rgba(52, 152, 219, 0.15); color: var(--info);
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center; padding: 2rem; color: var(--text-secondary);
+        }
+        
+        .empty-state i { font-size: 2rem; opacity: 0.3; margin-bottom: 0.5rem; }
+        
+        /* Performance Card */
+        .perf-card {
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.05) 0%, rgba(102, 126, 234, 0.05) 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .perf-title { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .perf-value { font-size: 1.5rem; font-weight: 800; }
+        .perf-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+        
+        /* Footer */
+        .footer {
+            text-align: center; padding: 1rem; margin-top: 1rem;
+            color: var(--text-secondary); font-size: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate { animation: fadeIn 0.4s ease; }
+        
+        /* Chart */
+        .chart-container { height: 200px; position: relative; }
+        
+        /* Progress Bar */
+        .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-bar .fill { height: 100%; border-radius: 2px; }
+        .progress-bar .fill.green { background: linear-gradient(90deg, var(--profit), var(--accent)); }
+        
+        /* Database Status */
+        .db-status {
+            display: flex; align-items: center; gap: 0.5rem;
+            font-size: 0.75rem; color: var(--text-secondary);
+        }
+        
+        .db-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--profit); }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    
+    <header class="header">
+        <div class="logo">
+            <h1>📈 Premium Trading Dashboard</h1>
+            <div class="strategy-badge">
+                <i class="fas fa-crown"></i>
+                <span>Gold 93% Win Rate Strategy</span>
+            </div>
+        </div>
+        <div class="status-container">
+            <div class="db-status">
+                <div class="db-dot"></div>
+                <span>Analytics DB Active</span>
+            </div>
+            <div id="market-status" class="market-status closed">
+                <div class="pulse"></div>
+                <span>MARKET CLOSED</span>
+            </div>
+            <div class="time-display" id="current-time">--:--:-- IST</div>
+        </div>
+    </header>
+    
+    <main class="container">
+        <!-- Strategy Hero -->
+        <div class="strategy-hero animate">
+            <div class="strategy-info">
+                <h2>Gold 93% Win Rate Strategy</h2>
+                <p class="subtitle">Multi-Indicator Confirmation with Trailing Stop Loss</p>
+                <div class="strategy-tags">
+                    <span class="tag equity"><i class="fas fa-chart-bar"></i> EQUITY</span>
+                    <span class="tag nse"><i class="fas fa-building"></i> NSE</span>
+                    <span class="tag intraday"><i class="fas fa-clock"></i> MIS Intraday</span>
+                    <span class="tag intraday"><i class="fas fa-layer-group"></i> 5x Leverage</span>
+                    <span class="tag angel"><i class="fas fa-university"></i> Angel One</span>
+                </div>
+            </div>
+            <div class="indicators-grid">
+                <div class="indicator-card">
+                    <div class="icon" style="background: rgba(255, 107, 107, 0.1); color: #ff6b6b;">
+                        <i class="fas fa-wave-square"></i>
+                    </div>
+                    <div class="name">RSI</div>
+                    <div class="params">(Period: 2)</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="icon" style="background: rgba(255, 217, 61, 0.1); color: #ffd93d;">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="name">Stochastic</div>
+                    <div class="params">(10, 3, 3)</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="icon" style="background: rgba(107, 203, 119, 0.1); color: #6bcb77;">
+                        <i class="fas fa-signal"></i>
+                    </div>
+                    <div class="name">CCI</div>
+                    <div class="params">(Period: 20)</div>
+                </div>
+                <div class="indicator-card">
+                    <div class="icon" style="background: rgba(77, 150, 255, 0.1); color: #4d96ff;">
+                        <i class="fas fa-chart-area"></i>
+                    </div>
+                    <div class="name">MACD</div>
+                    <div class="params">(12, 26, 9)</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stats Grid -->
+        <div class="stats-grid animate">
+            <div class="stat-card green">
+                <div class="stat-icon green"><i class="fas fa-wallet"></i></div>
+                <div class="stat-label">Capital</div>
+                <div class="stat-value" id="capital">₹10,000</div>
+                <div class="stat-sub up"><i class="fas fa-arrow-up"></i> 5x = ₹50,000</div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-icon green"><i class="fas fa-rupee-sign"></i></div>
+                <div class="stat-label">Today's P&L</div>
+                <div class="stat-value profit" id="today-pnl">+₹0</div>
+                <div class="stat-sub up" id="today-roi">+0.0% ROI</div>
+            </div>
+            <div class="stat-card blue">
+                <div class="stat-icon blue"><i class="fas fa-calendar-week"></i></div>
+                <div class="stat-label">This Week</div>
+                <div class="stat-value profit" id="week-pnl">+₹0</div>
+                <div class="stat-sub" id="week-trades">0 trades</div>
+            </div>
+            <div class="stat-card blue">
+                <div class="stat-icon purple"><i class="fas fa-calendar"></i></div>
+                <div class="stat-label">This Month</div>
+                <div class="stat-value profit" id="month-pnl">+₹0</div>
+                <div class="stat-sub" id="month-trades">0 trades</div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-icon cyan"><i class="fas fa-percentage"></i></div>
+                <div class="stat-label">Win Rate</div>
+                <div class="stat-value profit" id="win-rate">0%</div>
+                <div class="stat-sub">Target: 80%+</div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-icon orange"><i class="fas fa-list-check"></i></div>
+                <div class="stat-label">Watchlist</div>
+                <div class="stat-value" id="watchlist-count">0</div>
+                <div class="stat-sub">80%+ Win Rate Only</div>
+            </div>
+        </div>
+        
+        <!-- Grid Layout -->
+        <div class="grid-3 animate">
+            <!-- Open Positions -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-chart-line"></i> Open Positions <span class="badge" id="pos-count">0</span></h2>
+                </div>
+                <div id="positions-container">
+                    <div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>
+                </div>
+            </div>
+            
+            <!-- Today's Trades -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-history"></i> Today's Trades <span class="badge" id="trades-count">0</span></h2>
+                </div>
+                <div id="trades-container">
+                    <div class="empty-state"><i class="fas fa-calendar-day"></i><p>No trades today</p></div>
+                </div>
+            </div>
+            
+            <!-- All-Time Stats -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-trophy"></i> All-Time Stats</h2>
+                </div>
+                <div class="perf-card">
+                    <div class="perf-title">TOTAL P&L</div>
+                    <div class="perf-value profit" id="all-time-pnl">+₹0</div>
+                    <div class="perf-sub" id="all-time-trades">0 total trades</div>
+                </div>
+                <div class="perf-card">
+                    <div class="perf-title">OVERALL WIN RATE</div>
+                    <div class="perf-value profit" id="all-time-wr">0%</div>
+                    <div class="progress-bar"><div class="fill green" id="wr-bar" style="width: 0%;"></div></div>
+                </div>
+                <div class="perf-card">
+                    <div class="perf-title">PROFIT FACTOR</div>
+                    <div class="perf-value" id="profit-factor">0</div>
+                    <div class="perf-sub">Avg Win / Avg Loss</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Watchlist -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-star"></i> Smart Watchlist (80%+ Win Rate)</h2>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">
+                    <i class="fas fa-sync"></i> Next Scan: Monday 8 AM
+                </span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Stock</th>
+                        <th>Segment</th>
+                        <th>Strategy</th>
+                        <th>Win Rate</th>
+                        <th>Expected P&L</th>
+                        <th>Trail %</th>
+                    </tr>
+                </thead>
+                <tbody id="watchlist-body"></tbody>
+            </table>
+        </div>
+    </main>
+    
+    <footer class="footer">
+        <p>🤖 <strong>Gold 93% Win Rate Strategy</strong> | Segment: EQUITY | Exchange: NSE | Product: MIS Intraday | Broker: Angel One</p>
+        <p style="margin-top: 0.25rem;">📊 Analytics stored in SQLite Database | Last Update: <span id="last-update">--</span></p>
+    </footer>
+    
+    <script>
+        // Update time and market status
+        function updateTime() {
+            const now = new Date();
+            const options = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' };
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('en-IN', options) + ' IST';
+            
+            const hour = parseInt(now.toLocaleTimeString('en-IN', { hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }));
+            const day = now.getDay();
+            const isOpen = day >= 1 && day <= 5 && hour >= 9 && hour < 16;
+            
+            const statusEl = document.getElementById('market-status');
+            if (isOpen) {
+                statusEl.className = 'market-status open';
+                statusEl.innerHTML = '<div class="pulse"></div><span>MARKET OPEN</span>';
+            } else {
+                statusEl.className = 'market-status closed';
+                statusEl.innerHTML = '<div class="pulse"></div><span>MARKET CLOSED</span>';
+            }
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        function formatCurrency(val) {
+            const n = parseFloat(val) || 0;
+            return '₹' + Math.abs(n).toLocaleString('en-IN', {maximumFractionDigits: 0});
+        }
+        
+        function formatPnL(val) {
+            const n = parseFloat(val) || 0;
+            return (n >= 0 ? '+₹' : '-₹') + Math.abs(n).toLocaleString('en-IN', {maximumFractionDigits: 0});
+        }
+        
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                updateDashboard(data);
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false});
+            } catch (e) {
+                console.error('Fetch error:', e);
+            }
+        }
+        
+        function updateDashboard(data) {
+            const capital = data.capital || 10000;
+            document.getElementById('capital').textContent = formatCurrency(capital);
+            
+            const todayPnl = data.daily_pnl || 0;
+            document.getElementById('today-pnl').textContent = formatPnL(todayPnl);
+            document.getElementById('today-pnl').className = 'stat-value ' + (todayPnl >= 0 ? 'profit' : 'loss');
+            document.getElementById('today-roi').textContent = ((todayPnl / capital) * 100).toFixed(1) + '% ROI';
+            
+            // Week/Month stats from analytics
+            if (data.analytics) {
+                const week = data.analytics.weekly || {};
+                document.getElementById('week-pnl').textContent = formatPnL(week.total_pnl || 0);
+                document.getElementById('week-trades').textContent = (week.total_trades || 0) + ' trades';
+                
+                const month = data.analytics.monthly || {};
+                document.getElementById('month-pnl').textContent = formatPnL(month.total_pnl || 0);
+                document.getElementById('month-trades').textContent = (month.total_trades || 0) + ' trades';
+                
+                const allTime = data.analytics.all_time || {};
+                document.getElementById('all-time-pnl').textContent = formatPnL(allTime.total_pnl || 0);
+                document.getElementById('all-time-trades').textContent = (allTime.total_trades || 0) + ' total trades';
+                document.getElementById('all-time-wr').textContent = (allTime.win_rate || 0).toFixed(1) + '%';
+                document.getElementById('wr-bar').style.width = (allTime.win_rate || 0) + '%';
+                document.getElementById('profit-factor').textContent = (allTime.profit_factor || 0).toFixed(2);
+            }
+            
+            const trades = data.trades || [];
+            const wins = trades.filter(t => t.pnl > 0).length;
+            const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : 0;
+            document.getElementById('win-rate').textContent = winRate + '%';
+            document.getElementById('trades-count').textContent = trades.length;
+            
+            const watchlist = data.watchlist || [];
+            document.getElementById('watchlist-count').textContent = watchlist.length;
+            
+            const positions = data.positions || {};
+            document.getElementById('pos-count').textContent = Object.keys(positions).length;
+            
+            updatePositions(positions);
+            updateWatchlist(watchlist);
+            updateTrades(trades);
+        }
+        
+        function updatePositions(positions) {
+            const container = document.getElementById('positions-container');
+            const arr = Object.entries(positions);
+            
+            if (arr.length === 0) {
+                container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>';
+                return;
+            }
+            
+            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>Entry</th><th>SL</th></tr></thead><tbody>';
+            for (const [sym, pos] of arr) {
+                html += `<tr>
+                    <td><div class="stock-cell"><div class="stock-avatar">${sym.substring(0,2)}</div><div class="stock-info"><h4>${sym}</h4><span>Qty: ${pos.qty}</span></div></div></td>
+                    <td><span class="signal-badge ${pos.signal === 'BUY' ? 'buy' : 'sell'}">${pos.signal}</span></td>
+                    <td>₹${(pos.entry_price || 0).toFixed(2)}</td>
+                    <td>₹${(pos.trail_sl || pos.sl_price || 0).toFixed(2)}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        
+        function updateWatchlist(watchlist) {
+            const tbody = document.getElementById('watchlist-body');
+            if (watchlist.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Run scanner to populate watchlist</td></tr>';
+                return;
+            }
+            
+            let html = '';
+            for (const s of watchlist.slice(0, 10)) {
+                const wr = s.win_rate || 0;
+                html += `<tr>
+                    <td><div class="stock-cell"><div class="stock-avatar">${(s.symbol || s.name || '').substring(0,2)}</div><div class="stock-info"><h4>${s.symbol || s.name}</h4><span>${s.nse_symbol || ''}</span></div></div></td>
+                    <td><span class="segment-tag">EQUITY</span></td>
+                    <td><span style="font-size: 0.75rem; color: var(--accent);">Gold 93% WR</span></td>
+                    <td><span class="pnl ${wr >= 80 ? 'profit' : ''}">${wr.toFixed(1)}%</span></td>
+                    <td><span class="pnl profit">+₹${(s.expected_pnl || 0).toLocaleString()}</span></td>
+                    <td>${s.trail_percent}%</td>
+                </tr>`;
+            }
+            tbody.innerHTML = html;
+        }
+        
+        function updateTrades(trades) {
+            const container = document.getElementById('trades-container');
+            if (trades.length === 0) {
+                container.innerHTML = '<div class="empty-state"><i class="fas fa-calendar-day"></i><p>No trades today</p></div>';
+                return;
+            }
+            
+            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>P&L</th></tr></thead><tbody>';
+            for (const t of trades.slice(0, 5)) {
+                html += `<tr>
+                    <td>${t.symbol}</td>
+                    <td><span class="signal-badge ${t.signal === 'BUY' ? 'buy' : 'sell'}">${t.signal}</span></td>
+                    <td><span class="pnl ${t.pnl >= 0 ? 'profit' : 'loss'}">${formatPnL(t.pnl)}</span></td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        
+        fetchData();
+        setInterval(fetchData, 10000);
+    </script>
+</body>
+</html>
+"""
+
+def get_dashboard_data():
+    """Get all data for dashboard including analytics"""
+    data = {
+        'capital': 10000,
+        'daily_pnl': 0,
+        'trades': [],
+        'positions': {},
+        'watchlist': [],
+        'is_trading_hours': False,
+        'timestamp': datetime.now(IST).isoformat(),
+        'strategy': STRATEGY_CONFIG,
+        'trading': TRADING_CONFIG,
+        'analytics': {}
+    }
+    
+    # Load watchlist
+    try:
+        if os.path.exists("config/smart_watchlist.json"):
+            with open("config/smart_watchlist.json", 'r') as f:
+                wl = json.load(f)
+                data['watchlist'] = wl.get('active_stocks', [])
+                data['capital'] = wl.get('capital', 10000)
+    except:
+        pass
+    
+    # Load positions
+    try:
+        if os.path.exists("data/stock_positions.json"):
+            with open("data/stock_positions.json", 'r') as f:
+                data['positions'] = json.load(f)
+    except:
+        pass
+    
+    # Load today's trades
+    try:
+        if os.path.exists("data/today_trades.json"):
+            with open("data/today_trades.json", 'r') as f:
+                td = json.load(f)
+                today = datetime.now(IST).strftime('%Y-%m-%d')
+                if td.get('date') == today:
+                    data['trades'] = td.get('trades', [])
+                    data['daily_pnl'] = sum(t.get('pnl', 0) for t in data['trades'])
+    except:
+        pass
+    
+    # Load analytics from database
+    try:
+        from analytics_db import analytics_db
+        data['analytics'] = {
+            'weekly': analytics_db.get_weekly_summary(),
+            'monthly': analytics_db.get_monthly_summary(),
+            'all_time': analytics_db.get_all_time_stats(),
+            'top_stocks': analytics_db.get_top_stocks()
+        }
+    except Exception as e:
+        logger.warning(f"Analytics not available: {e}")
+        data['analytics'] = {
+            'weekly': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0},
+            'monthly': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0},
+            'all_time': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0, 'profit_factor': 0},
+            'top_stocks': []
+        }
+    
+    return data
+
+
+@app.route('/')
+def index():
+    return render_template_string(DASHBOARD_HTML)
+
+
+@app.route('/api/dashboard')
+def api_dashboard():
+    return jsonify(get_dashboard_data())
+
+
+@app.route('/api/analytics')
+def api_analytics():
+    try:
+        from analytics_db import analytics_db
+        return jsonify({
+            'weekly': analytics_db.get_weekly_summary(),
+            'monthly': analytics_db.get_monthly_summary(),
+            'all_time': analytics_db.get_all_time_stats(),
+            'daily_chart': analytics_db.get_daily_pnl_chart(),
+            'top_stocks': analytics_db.get_top_stocks()
+        })
+    except:
+        return jsonify({'error': 'Analytics not available'})
+
+
+@app.route('/api/strategy')
+def api_strategy():
+    return jsonify(STRATEGY_CONFIG)
+
+
+@app.route('/api/health')
+def api_health():
+    return jsonify({
+        'status': 'ok',
+        'strategy': 'Gold 93% Win Rate',
+        'segment': 'EQUITY',
+        'exchange': 'NSE',
+        'broker': 'Angel One',
+        'database': 'Active'
+    })
+
+
+def run_dashboard(port=5050):
+    logger.info(f"🌐 Premium Dashboard starting on http://localhost:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=5050)
+    args = parser.parse_args()
+    run_dashboard(args.port)

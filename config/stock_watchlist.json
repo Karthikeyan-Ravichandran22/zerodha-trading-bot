@@ -1,0 +1,86 @@
+{
+  "description": "Dynamic Stock Watchlist - Edit this file to add/remove stocks",
+  "last_updated": "2025-12-26 01:24",
+  "capital": 10000,
+  "leverage": 5,
+  "active_stocks": [
+    {
+      "symbol": "SBIN",
+      "nse_symbol": "SBIN.NS",
+      "name": "State Bank of India",
+      "trail_percent": 0.3,
+      "enabled": true
+    },
+    {
+      "symbol": "TATASTEEL",
+      "nse_symbol": "TATASTEEL.NS",
+      "name": "Tata Steel",
+      "trail_percent": 0.5,
+      "enabled": true
+    },
+    {
+      "symbol": "TATAPOWER",
+      "nse_symbol": "TATAPOWER.NS",
+      "name": "Tata Power",
+      "trail_percent": 0.4,
+      "enabled": true
+    },
+    {
+      "symbol": "IDEA",
+      "nse_symbol": "IDEA.NS",
+      "name": "Vodafone Idea",
+      "trail_percent": 1.0,
+      "enabled": true
+    },
+    {
+      "symbol": "YESBANK",
+      "nse_symbol": "YESBANK.NS",
+      "name": "Yes Bank",
+      "trail_percent": 0.8,
+      "enabled": true
+    },
+    {
+      "symbol": "IRFC",
+      "nse_symbol": "IRFC.NS",
+      "name": "IRFC",
+      "trail_percent": 0.5,
+      "enabled": true
+    },
+    {
+      "symbol": "NHPC",
+      "nse_symbol": "NHPC.NS",
+      "name": "NHPC",
+      "trail_percent": 0.5,
+      "enabled": false
+    },
+    {
+      "symbol": "PNB",
+      "nse_symbol": "PNB.NS",
+      "name": "Punjab National Bank",
+      "trail_percent": 0.5,
+      "enabled": false
+    },
+    {
+      "symbol": "SAIL",
+      "nse_symbol": "SAIL.NS",
+      "name": "Steel Authority",
+      "trail_percent": 0.6,
+      "enabled": false
+    },
+    {
+      "symbol": "BANKBARODA",
+      "nse_symbol": "BANKBARODA.NS",
+      "name": "Bank of Baroda",
+      "trail_percent": 0.4,
+      "enabled": false
+    },
+    {
+      "symbol": "RELIANCE",
+      "nse_symbol": "RELIANCE.NS",
+      "name": "Reliance Industries",
+      "trail_percent": 0.3,
+      "enabled": true
+    }
+  ],
+  "notes": "HOW TO USE: Set 'enabled': true to activate a stock, 'enabled': false to disable"
+}

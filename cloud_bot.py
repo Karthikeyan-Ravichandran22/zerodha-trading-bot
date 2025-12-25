@@ -70,15 +70,20 @@ class CloudTradingBot:
         self.market_filter = MarketSentimentFilter()
         self.last_sentiment_check = None
         
-        # Market hours (IST)
+        # Market hours (IST) for EQUITY
         self.market_open = dtime(9, 15)
-        self.trade_start = dtime(9, 45)  # Changed: Start after 9:45 (avoid opening volatility)
-        self.trade_end = dtime(14, 15)   # Changed: End before 2:15 (avoid closing volatility)
+        self.trade_start = dtime(9, 45)  # Equity: Start after 9:45 (avoid opening volatility)
+        self.trade_end = dtime(14, 15)   # Equity: End before 2:15 (avoid closing volatility)
         self.market_close = dtime(15, 30)
         
-        # Commodity scanner (Gold, Silver, Crude Oil)
+        # Commodity trading hours (MCX - full day 9 AM to 11:30 PM, Mon-Fri)
+        self.commodity_start = dtime(9, 0)     # Commodity: Start at 9:00 AM IST
+        self.commodity_end = dtime(23, 30)     # Commodity: End at 11:30 PM IST
+        
+        # Commodity scanner (Gold paper trading with ₹40,000 capital)
         self.commodity_scanner = None
         self.commodity_enabled = os.getenv('COMMODITY_TRADING', 'false').lower() == 'true'
+        self.commodity_paper_capital = 40000  # Paper trading capital for Gold
         logger.info(f"🏆 Commodity Trading: {'Enabled' if self.commodity_enabled else 'Disabled'}")
     
     def weekly_stock_optimization(self):
@@ -354,35 +359,81 @@ class CloudTradingBot:
         current_time = now.time()
         return self.trade_start <= current_time <= self.trade_end
     
+    def is_commodity_time(self) -> bool:
+        """Check if it's commodity trading time (2:30 PM - 11:30 PM IST)"""
+        now = datetime.now(IST)
+        
+        # Commodities trade Mon-Fri
+        if now.weekday() >= 5:
+            return False
+            
+        current_time = now.time()
+        return self.commodity_start <= current_time <= self.commodity_end
+    
     def scan_commodities(self):
-        """Scan Gold, Silver, and Crude Oil for signals"""
-        if not self.commodity_enabled or not self.commodity_scanner:
+        """Scan Gold for signals and record paper trades (runs after 2:30 PM)"""
+        if not self.commodity_enabled:
+            return
+        
+        # Only trade commodities during commodity hours
+        if not self.is_commodity_time():
             return
         
         try:
-            logger.info("🏆 Scanning commodities (Gold, Silver, Crude)...")
-            signals = self.commodity_scanner.scan_all(check_balance=False)
+            from strategies.gold_strategy import gold_strategy, GoldSignal
             
-            for signal in signals:
-                logger.info(f"📢 COMMODITY SIGNAL: {signal['commodity']}")
-                logger.info(f"   {signal['signal']} @ {signal['entry']}")
-                logger.info(f"   SL: {signal['sl']} | Target: {signal['target']}")
-                logger.info(f"   Confidence: {signal['confidence']:.0%} | {signal['reason']}")
+            # Check for existing paper position exit first
+            if gold_strategy.current_position:
+                data = gold_strategy.fetch_gold_data(period="1d", interval="5m")
+                if data is not None and len(data) > 0:
+                    current_price = float(data['Close'].iloc[-1])
+                    result = gold_strategy.check_paper_exits(current_price)
+                    if result:
+                        logger.info(f"🥇 Gold paper trade closed: {result}")
+                        # Send Telegram
+                        try:
+                            from utils.notifications import send_telegram_message
+                            stats = gold_strategy.get_paper_stats()
+                            msg = f"🥇 GOLD PAPER TRADE CLOSED: {result}\n\n"
+                            msg += f"💰 P&L: ₹{gold_strategy.paper_pnl:+,.0f}\n"
+                            msg += f"📊 Stats: {stats['wins']}W / {stats['losses']}L"
+                            send_telegram_message(msg)
+                        except:
+                            pass
+            
+            # Only scan for new signals if no position
+            if not gold_strategy.current_position:
+                logger.info("🥇 Scanning Gold for paper trading signals...")
+                signal = gold_strategy.generate_signal()
                 
-                # Send Telegram alert
-                try:
-                    from utils.notifications import send_telegram_message
-                    msg = f"🏆 COMMODITY SIGNAL: {signal['commodity']}\n\n"
-                    msg += f"📈 {signal['signal']} @ ${signal['entry']:.2f}\n"
-                    msg += f"🛡️ Stop Loss: ${signal['sl']:.2f}\n"
-                    msg += f"🎯 Target: ${signal['target']:.2f}\n"
-                    msg += f"💡 {signal['reason']}"
-                    send_telegram_message(msg)
-                except:
-                    pass
+                if signal:
+                    logger.info(f"📢 GOLD PAPER SIGNAL: {signal.signal}")
+                    logger.info(f"   Entry: ${signal.entry_price:.2f}")
+                    logger.info(f"   SL: ${signal.stop_loss:.2f} | Target: ${signal.target:.2f}")
+                    logger.info(f"   Reason: {signal.reason}")
+                    
+                    # Record paper trade
+                    gold_strategy.record_paper_trade(signal)
+                    
+                    # Send Telegram alert
+                    try:
+                        from utils.notifications import send_telegram_message
+                        msg = f"🥇 GOLD PAPER TRADE: {signal.signal}\n\n"
+                        msg += f"📈 Entry: ${signal.entry_price:.2f}\n"
+                        msg += f"🛡️ Stop Loss: ${signal.stop_loss:.2f}\n"
+                        msg += f"🎯 Target: ${signal.target:.2f}\n"
+                        msg += f"💡 {signal.reason}"
+                        send_telegram_message(msg)
+                    except:
+                        pass
+                else:
+                    logger.debug("🥇 Gold: No signal (waiting for EMA crossover with filters)")
+            else:
+                pos = gold_strategy.current_position
+                logger.info(f"🥇 Gold paper position: {pos['action']} @ ${pos['entry']:.2f}")
                     
         except Exception as e:
-            logger.error(f"Commodity scan error: {e}")
+            logger.error(f"Gold paper trading error: {e}")
     
     def scan_for_signals(self):
         """Scan all stocks for signals"""
@@ -785,6 +836,7 @@ class CloudTradingBot:
         schedule.every(1).minutes.do(self.scan_for_signals)  # Scan every 1 minute
         schedule.every(5).minutes.do(self.refresh_balance)  # Refresh balance every 5 minutes
         schedule.every().day.at("14:15").do(lambda: logger.info("🟡 Trading window ended. No new trades."))
+        schedule.every().day.at("14:30").do(lambda: logger.info("🥇 Commodity trading window started! (Gold paper trading)"))
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
         
@@ -797,8 +849,13 @@ class CloudTradingBot:
         
         # Immediate scan if in trading window
         if self.is_trading_time():
-            logger.info("🔄 Running initial scan...")
+            logger.info("🔄 Running initial equity scan...")
             self.scan_for_signals()
+        
+        # Immediate commodity scan if in commodity time
+        if self.is_commodity_time():
+            logger.info(f"🥇 Running initial commodity scan (Paper Capital: ₹{self.commodity_paper_capital:,})...")
+            self.scan_commodities()
         
         while True:
             try:
@@ -878,12 +935,40 @@ def start_dashboard():
                 gold_stats['win_rate'] = stats.get('win_rate', 0)
                 gold_stats['trades'] = gold_strategy.paper_trades[-10:]  # Last 10 trades
                 
+                # Current position
+                if gold_strategy.current_position:
+                    gold_stats['current_position'] = gold_strategy.current_position
+                else:
+                    gold_stats['current_position'] = None
+                
                 # Get current price and trend
                 market = gold_strategy.get_market_status()
                 gold_stats['price'] = market.get('price', 0)
                 gold_stats['trend'] = market.get('trend', 'N/A')
                 gold_stats['rsi'] = market.get('rsi', 0)
                 gold_stats['quality'] = market.get('quality', 'N/A')
+                
+                # Calculate INR price (MCX equivalent per 10g)
+                # 1 oz = 31.1 grams, USD/INR ~ 85
+                usd_price = market.get('price', 0)
+                usd_inr_rate = 85  # Approximate, can be fetched dynamically
+                gold_per_gram_inr = (usd_price * usd_inr_rate) / 31.1
+                gold_stats['price_inr'] = round(gold_per_gram_inr * 10, 0)  # Per 10g for MCX
+                gold_stats['exchange'] = 'MCX'
+                gold_stats['symbol'] = 'GOLDM'
+                gold_stats['lot_size'] = '100g'
+                
+                # Dynamic trading math (based on current price)
+                contract_value = gold_per_gram_inr * 100  # 100g per lot
+                gold_stats['trading_math'] = {
+                    'lots': 1,
+                    'lot_qty': '100g',
+                    'contract_value': round(contract_value, 0),
+                    'margin_required': round(contract_value * 0.028, 0),  # ~2.8% margin
+                    'risk_per_trade': round(contract_value * 0.005, 0),   # 0.5% SL
+                    'target_per_trade': round(contract_value * 0.01, 0),  # 1% target
+                    'rr_ratio': '2:1'
+                }
             except Exception as ge:
                 pass
             

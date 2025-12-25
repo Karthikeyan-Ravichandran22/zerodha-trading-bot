@@ -28,6 +28,46 @@
 
 ---
 
+## 📈 STOCK TRADING PIPELINE (NEW!)
+
+### Smart Stock Selection
+- **Automatic Stock Scanner** - Scans 40+ quality stocks
+- **80%+ Win Rate Filter** - Only trades high-probability stocks
+- **Weekly Refresh** - Updates watchlist every Monday 8 AM
+- **Capital Aware** - Adjusts to your Angel One balance
+
+### How It Works
+```
+Every Monday 8 AM:
+1. Scanner runs → Tests each stock with our strategy
+2. Filters 80%+ win rate stocks
+3. Updates watchlist automatically
+4. Sends Telegram alert with selected stocks
+
+Monday - Friday (9:15 AM - 3:30 PM):
+1. Bot scans watchlist for signals
+2. Places orders on Angel One (MIS - Intraday)
+3. Manages trailing stop loss
+4. Sends trade alerts via Telegram
+```
+
+### Commands
+```bash
+# Run stock scanner now
+python smart_stock_selector.py --capital 10000
+
+# Manage watchlist
+python manage_watchlist.py           # View watchlist
+python manage_watchlist.py add TCS   # Add stock
+python manage_watchlist.py remove TCS # Remove stock
+
+# Start trading bot
+python main.py                       # Full pipeline
+python main.py --scan-now            # Scan and start
+```
+
+---
+
 ## 🚀 FEATURES
 
 ### ✅ AUTO Trading (Full Automation)

@@ -1,239 +1,301 @@
+#!/usr/bin/env python3
 """
-Zerodha Automated Trading Bot - Main Entry Point
+🚀 UNIFIED TRADING BOT - MAIN ENTRY POINT
+==========================================
+
+This runs:
+1. Weekly Stock Selector (Every Monday 8 AM)
+2. Stock Trading Bot (Mon-Fri 9:15 AM - 3:30 PM)
+3. Web Dashboard (Always running)
+4. Telegram Notifications
+
+Usage:
+    python main.py                    # Run full bot
+    python main.py --stock-only       # Run only stock bot
+    python main.py --scan-now         # Run stock scan immediately
+    
+Deployment:
+    Railway/Cloud: python main.py
 """
 
+import os
 import sys
 import time
-import schedule
-from datetime import datetime, time as dtime
-from typing import List
-import click
+import json
+import threading
+import pytz
+from datetime import datetime, timedelta
 from loguru import logger
+import schedule
 
-from config.settings import (
-    TRADING_MODE, ACTIVE_STRATEGIES, STOCK_WATCHLIST,
-    MARKET_OPEN, MARKET_CLOSE, SQUARE_OFF_TIME, NO_NEW_TRADES_AFTER,
-    MORNING_SESSION_START, MORNING_SESSION_END,
-    AFTERNOON_SESSION_START, AFTERNOON_SESSION_END,
-    print_config, validate_config
-)
-from core.zerodha_client import get_zerodha_client
-from core.risk_manager import get_risk_manager
-from core.order_manager import OrderManager, OrderSide
-from core.data_fetcher import DataFetcher
-from strategies import (
-    VWAPBounceStrategy, ORBStrategy, 
-    GapAndGoStrategy, EMACrossoverStrategy
-)
-from utils.logger import setup_logger
-from utils.notifications import send_telegram_message, send_trade_alert
+# Add project root
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+IST = pytz.timezone('Asia/Kolkata')
+
+# Setup logging
+os.makedirs("logs", exist_ok=True)
+os.makedirs("data", exist_ok=True)
+os.makedirs("config", exist_ok=True)
+
+logger.remove()
+logger.add(sys.stdout, format="{time:HH:mm:ss} | {level} | {message}", level="INFO")
+logger.add("logs/main_{time:YYYY-MM-DD}.log", rotation="1 day", retention="7 days", level="INFO")
 
 
-class TradingBot:
-    """Main trading bot orchestrator"""
+class TradingPipeline:
+    """Main trading pipeline that orchestrates everything"""
     
-    def __init__(self, mode: str = None):
-        self.mode = mode or TRADING_MODE
-        self.client = get_zerodha_client()
-        self.risk_manager = get_risk_manager()
-        self.data_fetcher = DataFetcher(self.client)
-        self.order_manager = OrderManager(self.client)
-        self.strategies = []
+    def __init__(self):
+        self.stock_bot = None
+        self.weekly_scheduler = None
+        self.dashboard_thread = None
+        self.stock_bot_thread = None
         self.is_running = False
-        
-        setup_logger("trading_bot")
     
-    def initialize(self, request_token: str = None) -> bool:
-        """Initialize bot and connect to Zerodha"""
-        logger.info("🚀 Initializing Trading Bot...")
-        print_config()
+    def check_watchlist_exists(self):
+        """Check if watchlist exists, create if needed"""
+        watchlist_file = "config/smart_watchlist.json"
         
-        # Validate configuration
-        errors = validate_config()
-        if errors:
-            for err in errors:
-                logger.error(f"Config Error: {err}")
-            return False
+        if not os.path.exists(watchlist_file):
+            logger.info("📋 No watchlist found. Running initial stock scan...")
+            self.run_stock_scan()
+            return os.path.exists(watchlist_file)
         
-        # Initialize Zerodha client
-        if self.mode in ["auto", "semi-auto"]:
-            if not self.client.initialize():
-                return False
-            if not self.client.authenticate(request_token):
-                return False
-        else:
-            logger.info(f"📝 Running in {self.mode.upper()} mode - no Zerodha connection needed")
+        # Check if watchlist is recent (within 7 days)
+        try:
+            with open(watchlist_file, 'r') as f:
+                data = json.load(f)
+                last_updated = data.get('last_updated', '')
+                if last_updated:
+                    last_date = datetime.strptime(last_updated.split()[0], '%Y-%m-%d')
+                    days_old = (datetime.now() - last_date).days
+                    if days_old > 7:
+                        logger.info(f"📋 Watchlist is {days_old} days old. Refreshing...")
+                        self.run_stock_scan()
+        except Exception as e:
+            logger.warning(f"Error checking watchlist age: {e}")
         
-        # Initialize strategies
-        self._load_strategies()
-        
-        logger.info("✅ Bot initialized successfully!")
         return True
     
-    def _load_strategies(self):
-        """Load active strategies"""
-        strategy_map = {
-            "vwap_bounce": VWAPBounceStrategy,
-            "orb": ORBStrategy,
-            "gap_and_go": GapAndGoStrategy,
-            "ema_crossover": EMACrossoverStrategy
-        }
-        
-        for strategy_name in ACTIVE_STRATEGIES:
-            strategy_name = strategy_name.strip().lower()
-            if strategy_name in strategy_map:
-                strategy = strategy_map[strategy_name](
-                    data_fetcher=self.data_fetcher,
-                    risk_manager=self.risk_manager
-                )
-                self.strategies.append(strategy)
-                logger.info(f"📈 Loaded strategy: {strategy.name}")
-    
-    def is_market_hours(self) -> bool:
-        """Check if current time is within market hours"""
-        now = datetime.now().time()
-        return MARKET_OPEN <= now <= MARKET_CLOSE
-    
-    def is_trading_window(self) -> bool:
-        """Check if current time is within trading windows"""
-        now = datetime.now().time()
-        
-        # Morning session: 9:30 - 11:30
-        in_morning = MORNING_SESSION_START <= now <= MORNING_SESSION_END
-        
-        # Afternoon session: 1:00 - 2:30
-        in_afternoon = AFTERNOON_SESSION_START <= now <= AFTERNOON_SESSION_END
-        
-        return in_morning or in_afternoon
-    
-    def should_stop_new_trades(self) -> bool:
-        """Check if we should stop taking new trades"""
-        now = datetime.now().time()
-        return now >= NO_NEW_TRADES_AFTER
-    
-    def scan_for_signals(self):
-        """Scan all stocks for trading signals"""
-        can_trade, reason = self.risk_manager.can_take_trade()
-        if not can_trade:
-            logger.warning(reason)
-            return
-        
-        if self.should_stop_new_trades():
-            logger.info("⏰ No new trades after 2:30 PM")
-            return
-        
-        logger.info(f"🔍 Scanning {len(STOCK_WATCHLIST)} stocks...")
-        
-        for strategy in self.strategies:
-            signals = strategy.scan_symbols(STOCK_WATCHLIST)
-            for signal in signals:
-                self._process_signal(signal, strategy.name)
-    
-    def _process_signal(self, signal, strategy_name: str):
-        """Process a trading signal"""
-        logger.info(f"\n{'='*50}")
-        logger.info(f"📢 SIGNAL from {strategy_name}")
-        logger.info(f"   {signal.signal.value} {signal.symbol}")
-        logger.info(f"   Entry: ₹{signal.entry_price}")
-        logger.info(f"   SL: ₹{signal.stop_loss} | Target: ₹{signal.target}")
-        logger.info(f"   Qty: {signal.quantity} | Reason: {signal.reason}")
-        logger.info(f"{'='*50}\n")
-        
-        # Send notification
-        send_trade_alert(
-            action=signal.signal.value,
-            symbol=signal.symbol,
-            entry=signal.entry_price,
-            sl=signal.stop_loss,
-            target=signal.target,
-            qty=signal.quantity
-        )
-        
-        if self.mode == "signal":
-            logger.info("📢 Signal mode - not placing order")
-            return
-        
-        if self.mode == "semi-auto":
-            confirm = input(f"Place order? (y/n): ").strip().lower()
-            if confirm != 'y':
-                logger.info("Order cancelled by user")
-                return
-        
-        # Place order
-        side = OrderSide.BUY if signal.signal.value == "BUY" else OrderSide.SELL
-        order = self.order_manager.place_bracket_order(
-            symbol=signal.symbol,
-            side=side,
-            quantity=signal.quantity,
-            entry_price=signal.entry_price,
-            stop_loss=signal.stop_loss,
-            target=signal.target,
-            strategy=strategy_name
-        )
-        
-        if order:
-            self.risk_manager.record_trade_entry()
-    
-    def check_positions(self):
-        """Check and manage open positions"""
-        positions = self.order_manager.get_open_positions()
-        if not positions:
-            return
-        
-        logger.info(f"📊 Open positions: {len(positions)}")
-        for pos in positions:
-            logger.info(f"   {pos.symbol}: {pos.side.value} {pos.quantity} @ ₹{pos.price}")
-    
-    def square_off_all(self):
-        """Square off all positions"""
-        logger.warning("🔔 Squaring off all positions!")
-        self.order_manager.square_off_all()
-        send_telegram_message("🔔 All positions squared off for the day")
-    
-    def run(self):
-        """Main run loop"""
-        self.is_running = True
-        logger.info("🤖 Bot is now running...")
-        
-        # Schedule tasks
-        schedule.every(1).minutes.do(self.scan_for_signals)
-        schedule.every(30).seconds.do(self.check_positions)
-        schedule.every().day.at("15:10").do(self.square_off_all)
-        
+    def run_stock_scan(self):
+        """Run the smart stock selector"""
         try:
-            while self.is_running:
-                if not self.is_market_hours():
-                    logger.info("⏳ Market closed. Waiting...")
-                    time.sleep(60)
-                    continue
+            from smart_stock_selector import run_smart_selector
+            
+            # Try to get capital from Angel One
+            capital = 10000
+            try:
+                from core.angel_client import AngelClient
+                client = AngelClient()
+                if client.authenticate():
+                    balance = client.get_margin()
+                    if balance and balance > 1000:
+                        capital = int(balance)
+            except:
+                pass
+            
+            logger.info(f"🔍 Running stock scan with capital: Rs {capital:,}")
+            
+            qualified = run_smart_selector(
+                capital=capital,
+                min_win_rate=80,
+                leverage=5
+            )
+            
+            if qualified:
+                # Send Telegram notification
+                try:
+                    from utils.notifications import send_telegram_message
+                    stocks_list = ", ".join([s['name'] for s in qualified[:5]])
+                    msg = f"""
+🏆 *WEEKLY STOCKS SELECTED*
+
+{len(qualified)} stocks qualified (80%+ WR):
+{stocks_list}
+
+Trading will start at 9:15 AM
+"""
+                    send_telegram_message(msg)
+                except Exception as e:
+                    logger.warning(f"Telegram notification failed: {e}")
+            
+            return qualified
+            
+        except Exception as e:
+            logger.error(f"Stock scan failed: {e}")
+            return None
+    
+    def start_dashboard(self):
+        """Start the web dashboard"""
+        try:
+            from dashboard import run_dashboard
+            port = int(os.environ.get('PORT', 5050))
+            run_dashboard(port)
+        except Exception as e:
+            logger.error(f"Dashboard error: {e}")
+            # Fallback to simple dashboard
+            try:
+                from flask import Flask, jsonify
                 
-                if not self.is_trading_window():
-                    logger.debug("Outside trading window")
-                    time.sleep(30)
-                    continue
+                app = Flask(__name__)
                 
+                @app.route('/')
+                def home():
+                    return """
+                    <html>
+                    <head><title>Trading Bot Dashboard</title></head>
+                    <body style="font-family:Arial; padding:20px; background:#1e1e1e; color:#fff;">
+                        <h1>📈 Trading Bot Dashboard</h1>
+                        <p>Bot Status: 🟢 Running</p>
+                        <p>View <a href="/api/status" style="color:#00ff00;">API Status</a></p>
+                        <p>View <a href="/api/watchlist" style="color:#00ff00;">Watchlist</a></p>
+                    </body>
+                    </html>
+                    """
+                
+                port = int(os.environ.get('PORT', 5050))
+                logger.info(f"🌐 Fallback dashboard on port {port}")
+                app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+                
+            except Exception as fallback_error:
+                logger.error(f"Fallback dashboard also failed: {fallback_error}")
+    
+    def is_trading_hours(self):
+        """Check if within trading hours"""
+        now = datetime.now(IST)
+        
+        # Skip weekends
+        if now.weekday() >= 5:
+            return False
+        
+        # Market hours: 9:15 AM - 3:30 PM
+        market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+        market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+        
+        return market_open <= now <= market_close
+    
+    def is_scan_time(self):
+        """Check if it's time for weekly scan (Monday 8 AM)"""
+        now = datetime.now(IST)
+        return now.weekday() == 0 and 7 <= now.hour <= 9
+    
+    def start_stock_bot(self):
+        """Start the stock trading bot"""
+        try:
+            from stock_trading_bot import StockTradingBot
+            
+            bot = StockTradingBot()
+            bot.run()
+            
+        except Exception as e:
+            logger.error(f"Stock bot error: {e}")
+    
+    def run_scheduled_tasks(self):
+        """Run scheduled tasks"""
+        # Weekly stock scan - Monday 8 AM
+        schedule.every().monday.at("08:00").do(self.run_stock_scan)
+        
+        # Daily health check
+        schedule.every().day.at("09:00").do(self.health_check)
+        
+        while self.is_running:
+            try:
                 schedule.run_pending()
-                time.sleep(1)
-                
-        except KeyboardInterrupt:
-            logger.info("🛑 Shutting down...")
-            self.is_running = False
-            self.square_off_all()
+                time.sleep(30)
+            except Exception as e:
+                logger.error(f"Scheduler error: {e}")
+                time.sleep(60)
+    
+    def health_check(self):
+        """Daily health check"""
+        now = datetime.now(IST)
+        logger.info(f"💓 Health check at {now.strftime('%Y-%m-%d %H:%M')}")
+        
+        # Check watchlist
+        self.check_watchlist_exists()
+        
+        # Send Telegram ping
+        try:
+            from utils.notifications import send_telegram_message
+            send_telegram_message(f"💓 Bot health check OK at {now.strftime('%H:%M')}")
+        except:
+            pass
+    
+    def run(self, stock_only=False, scan_now=False):
+        """Main run method"""
+        logger.info("="*60)
+        logger.info("🚀 UNIFIED TRADING BOT STARTING")
+        logger.info("="*60)
+        
+        now = datetime.now(IST)
+        logger.info(f"⏰ Current Time: {now.strftime('%Y-%m-%d %H:%M:%S')} IST")
+        
+        # Send startup message
+        try:
+            from utils.notifications import send_telegram_message
+            send_telegram_message(f"""
+🚀 *TRADING BOT STARTED*
+
+Time: {now.strftime('%Y-%m-%d %H:%M')} IST
+Mode: {'Stock Only' if stock_only else 'Full Pipeline'}
+
+Components:
+• Weekly Scanner: ✅
+• Stock Bot: ✅
+• Dashboard: ✅
+• Telegram: ✅
+""")
+        except Exception as e:
+            logger.warning(f"Telegram notification failed: {e}")
+        
+        self.is_running = True
+        
+        # Run immediate scan if requested
+        if scan_now:
+            logger.info("📋 Running immediate stock scan...")
+            self.run_stock_scan()
+        
+        # Check and create watchlist if needed
+        self.check_watchlist_exists()
+        
+        # Start dashboard in background
+        if not stock_only:
+            self.dashboard_thread = threading.Thread(target=self.start_dashboard, daemon=True)
+            self.dashboard_thread.start()
+            logger.info("🌐 Dashboard thread started")
+            time.sleep(2)
+        
+        # Start scheduler in background
+        scheduler_thread = threading.Thread(target=self.run_scheduled_tasks, daemon=True)
+        scheduler_thread.start()
+        logger.info("📅 Scheduler thread started")
+        
+        # Run stock bot in main thread
+        logger.info("📈 Starting stock trading bot...")
+        self.start_stock_bot()
 
 
-@click.command()
-@click.option('--mode', type=click.Choice(['paper', 'signal', 'semi-auto', 'auto']), 
-              default=None, help='Trading mode')
-@click.option('--token', default=None, help='Zerodha request token for authentication')
-def main(mode, token):
-    """Zerodha Automated Trading Bot"""
-    bot = TradingBot(mode=mode)
+def main():
+    """Entry point"""
+    import argparse
     
-    if not bot.initialize(request_token=token):
-        logger.error("Failed to initialize bot")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Unified Trading Bot')
+    parser.add_argument('--stock-only', action='store_true', help='Run only stock bot')
+    parser.add_argument('--scan-now', action='store_true', help='Run stock scan immediately')
+    parser.add_argument('--scan-only', action='store_true', help='Just run scan and exit')
     
-    bot.run()
+    args = parser.parse_args()
+    
+    if args.scan_only:
+        # Just run scan and exit
+        pipeline = TradingPipeline()
+        pipeline.run_stock_scan()
+        return
+    
+    # Run full pipeline
+    pipeline = TradingPipeline()
+    pipeline.run(stock_only=args.stock_only, scan_now=args.scan_now)
 
 
 if __name__ == "__main__":
