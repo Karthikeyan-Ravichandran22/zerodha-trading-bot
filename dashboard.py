@@ -1326,13 +1326,43 @@ def get_dashboard_data():
     except:
         pass
     
-    # Load analytics from database
+    # Calculate analytics from positions and trades (ALWAYS available)
+    positions = data.get('positions', {})
+    trades = data.get('trades', [])
+    
+    # Count completed trades from closed positions
+    closed_positions = [p for p in positions.values() if p.get('qty', 0) == 0]
+    total_trades = len(closed_positions)
+    
+    # Calculate P&L from closed positions (realized)
+    total_pnl = sum(p.get('realised_pnl', p.get('pnl', 0)) for p in closed_positions)
+    
+    # Calculate win rate
+    winning_trades = len([p for p in closed_positions if p.get('realised_pnl', p.get('pnl', 0)) > 0])
+    win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
+    
+    # Calculate profit factor (total wins / total losses)
+    total_wins = sum(p.get('realised_pnl', p.get('pnl', 0)) for p in closed_positions if p.get('realised_pnl', p.get('pnl', 0)) > 0)
+    total_losses = abs(sum(p.get('realised_pnl', p.get('pnl', 0)) for p in closed_positions if p.get('realised_pnl', p.get('pnl', 0)) < 0))
+    profit_factor = (total_wins / total_losses) if total_losses > 0 else (float('inf') if total_wins > 0 else 0)
+    
+    # Load analytics from database (may have historical data)
     try:
         from analytics_db import analytics_db
+        db_all_time = analytics_db.get_all_time_stats() or {}
+        db_weekly = analytics_db.get_weekly_summary() or {}
+        db_monthly = analytics_db.get_monthly_summary() or {}
+        
+        # Merge database stats with today's calculated stats
         data['analytics'] = {
-            'weekly': analytics_db.get_weekly_summary(),
-            'monthly': analytics_db.get_monthly_summary(),
-            'all_time': analytics_db.get_all_time_stats(),
+            'weekly': db_weekly,
+            'monthly': db_monthly,
+            'all_time': {
+                'total_trades': max(total_trades, db_all_time.get('total_trades', 0)),
+                'total_pnl': total_pnl if total_trades > 0 else db_all_time.get('total_pnl', 0),
+                'win_rate': win_rate if total_trades > 0 else db_all_time.get('win_rate', 0),
+                'profit_factor': profit_factor if total_trades > 0 else db_all_time.get('profit_factor', 0)
+            },
             'top_stocks': analytics_db.get_top_stocks()
         }
         # Get P&L history for chart
@@ -1341,18 +1371,24 @@ def get_dashboard_data():
             if daily_chart:
                 data['pnl_history'] = [d.get('pnl', 0) for d in daily_chart[-5:]]  # Last 5 days
             else:
-                data['pnl_history'] = [0, 0, 0, 0, 0]
+                data['pnl_history'] = [0, 0, 0, 0, total_pnl]
         except:
-            data['pnl_history'] = [0, 0, 0, 0, 0]
+            data['pnl_history'] = [0, 0, 0, 0, total_pnl]
     except Exception as e:
-        logger.warning(f"Analytics not available: {e}")
+        logger.warning(f"Analytics database not available: {e}")
+        # Use calculated stats from positions/trades
         data['analytics'] = {
-            'weekly': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0},
-            'monthly': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0},
-            'all_time': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0, 'profit_factor': 0},
+            'weekly': {'total_trades': total_trades, 'total_pnl': total_pnl, 'win_rate': win_rate},
+            'monthly': {'total_trades': total_trades, 'total_pnl': total_pnl, 'win_rate': win_rate},
+            'all_time': {
+                'total_trades': total_trades, 
+                'total_pnl': total_pnl, 
+                'win_rate': win_rate, 
+                'profit_factor': profit_factor if profit_factor != float('inf') else 999
+            },
             'top_stocks': []
         }
-        data['pnl_history'] = [0, 0, 0, 0, 0]
+        data['pnl_history'] = [0, 0, 0, 0, total_pnl]
     
     # Load broker (Angel One) balance
     try:
