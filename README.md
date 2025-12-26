@@ -72,8 +72,15 @@ This project uses Git tags for version control. Tags are permanent bookmarks to 
 ### Current Tags
 ```bash
 git tag          # List all tags
-# Output: v1.0-stable
+# Output:
+# v1.0-stable
+# v1.1-smart-conversion
 ```
+
+| Tag | Description |
+|-----|-------------|
+| `v1.0-stable` | Production ready dashboard with correct exit prices |
+| `v1.1-smart-conversion` | Smart CNC Conversion feature added |
 
 ### How to Rollback
 If something breaks after an update:
@@ -89,15 +96,52 @@ git push origin main --force
 ### View Tag Details
 ```bash
 git show v1.0-stable
+git show v1.1-smart-conversion
 ```
 Shows: creator, date, description, and code changes included.
 
 ### Creating New Version Tags
 After making improvements:
 ```bash
-git tag -a v1.1-stable -m "Added feature XYZ"
-git push origin v1.1-stable
+git tag -a v1.2-feature-name -m "Added feature XYZ"
+git push origin v1.2-feature-name
 ```
+
+---
+
+## 🚀 Railway Deployment
+
+### Auto-Deployment
+Railway **automatically deploys** when you push to `main` branch:
+```bash
+git push origin main  # This triggers auto-deploy!
+```
+
+### What Triggers Deployment:
+| Action | Deploys? |
+|--------|----------|
+| `git push origin main` | ✅ Yes (auto-deploy) |
+| `git push origin some-branch` | ❌ No |
+| `git push origin v1.1-tag` | ❌ No (tags are just labels) |
+
+### Deployment Flow:
+```
+git push origin main
+       ↓
+Railway detects change
+       ↓
+Builds new container (1-2 min)
+       ↓
+Deploys to production
+       ↓
+Live at: https://worker-production-65d3.up.railway.app
+```
+
+### Check Deployment Status:
+1. Go to [Railway Dashboard](https://railway.app/dashboard)
+2. Click your project
+3. Check "Deployments" tab
+4. Green = Live / Yellow = Building
 
 ---
 
