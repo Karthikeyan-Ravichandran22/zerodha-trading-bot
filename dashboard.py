@@ -703,6 +703,31 @@ DASHBOARD_HTML = """
                 <tbody id="watchlist-body"></tbody>
             </table>
         </div>
+        
+        <!-- Trade History Section -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-history"></i> Trade History</h2>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">
+                    <i class="fas fa-database"></i> Stored in SQLite
+                </span>
+            </div>
+            
+            <!-- Date Tabs -->
+            <div id="history-dates" style="display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.5rem 0; margin-bottom: 1rem;">
+                <div style="color: #888; font-size: 0.8rem; padding: 0.5rem;">Loading dates...</div>
+            </div>
+            
+            <!-- Selected Date Details -->
+            <div id="history-details" style="display: none;">
+                <div style="font-size: 0.9rem; color: var(--accent); margin-bottom: 0.75rem; font-weight: 600;">
+                    <i class="fas fa-calendar-day"></i> <span id="selected-date-label">--</span>
+                </div>
+                <div id="history-positions" style="display: grid; gap: 0.75rem;">
+                    <div class="empty-state"><i class="fas fa-inbox"></i><p>Select a date to view trades</p></div>
+                </div>
+            </div>
+        </div>
     </main>
     
     <footer class="footer">
@@ -1276,6 +1301,163 @@ DASHBOARD_HTML = """
         
         fetchData();
         setInterval(fetchData, 3000);  // Update every 3 seconds for LIVE feel
+        
+        // Trade History Functions
+        let selectedHistoryDate = null;
+        
+        async function loadTradingDates() {
+            try {
+                const res = await fetch('/api/trading-dates');
+                const data = await res.json();
+                const dates = data.dates || [];
+                
+                const container = document.getElementById('history-dates');
+                
+                if (dates.length === 0) {
+                    container.innerHTML = '<div style="color: #888; font-size: 0.8rem; padding: 0.5rem;">No trading history yet. Trades will appear here after market hours.</div>';
+                    return;
+                }
+                
+                let html = '';
+                for (const d of dates) {
+                    const dateObj = new Date(d.date + 'T00:00:00');
+                    const dayName = dateObj.toLocaleDateString('en-IN', {weekday: 'short'});
+                    const dayNum = dateObj.getDate();
+                    const month = dateObj.toLocaleDateString('en-IN', {month: 'short'});
+                    const pnlClass = (d.total_pnl || 0) >= 0 ? 'profit' : 'loss';
+                    const pnlSign = (d.total_pnl || 0) >= 0 ? '+' : '';
+                    
+                    html += `
+                    <div onclick="loadPositionsByDate('${d.date}')" 
+                         class="date-tab ${selectedHistoryDate === d.date ? 'active' : ''}"
+                         style="cursor: pointer; padding: 0.75rem 1rem; background: ${selectedHistoryDate === d.date ? 'rgba(0,212,170,0.2)' : 'rgba(255,255,255,0.05)'}; 
+                                border-radius: 10px; border: 1px solid ${selectedHistoryDate === d.date ? 'var(--accent)' : 'var(--border)'}; 
+                                min-width: 80px; text-align: center; transition: all 0.2s;">
+                        <div style="font-weight: 700; font-size: 1.1rem; color: ${selectedHistoryDate === d.date ? 'var(--accent)' : '#fff'};">${dayNum}</div>
+                        <div style="font-size: 0.7rem; color: #888;">${dayName}, ${month}</div>
+                        <div style="margin-top: 0.3rem; font-size: 0.65rem;">
+                            <span style="color: #888;">${d.trade_count || 0} trades</span>
+                        </div>
+                        <div class="pnl ${pnlClass}" style="font-size: 0.75rem; font-weight: 600;">
+                            ${pnlSign}₹${Math.abs(d.total_pnl || 0).toFixed(0)}
+                        </div>
+                    </div>`;
+                }
+                container.innerHTML = html;
+            } catch (e) {
+                console.error('Error loading trading dates:', e);
+            }
+        }
+        
+        async function loadPositionsByDate(date) {
+            selectedHistoryDate = date;
+            loadTradingDates(); // Refresh date tabs to show active
+            
+            try {
+                const res = await fetch('/api/positions/' + date);
+                const data = await res.json();
+                const positions = data.positions || [];
+                
+                document.getElementById('history-details').style.display = 'block';
+                
+                const dateObj = new Date(date + 'T00:00:00');
+                const formattedDate = dateObj.toLocaleDateString('en-IN', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+                document.getElementById('selected-date-label').textContent = formattedDate;
+                
+                const container = document.getElementById('history-positions');
+                
+                if (positions.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No trades on this date</p></div>';
+                    return;
+                }
+                
+                let html = '';
+                for (const pos of positions) {
+                    html += renderHistoryCard(pos);
+                }
+                container.innerHTML = html;
+                
+            } catch (e) {
+                console.error('Error loading positions:', e);
+            }
+        }
+        
+        function renderHistoryCard(pos) {
+            const entryPrice = pos.entry_price || 0;
+            const exitPrice = pos.exit_price || 0;
+            const sl = pos.stop_loss || 0;
+            const target = pos.target || 0;
+            const trailSl = pos.trail_sl || sl;
+            const pnl = pos.pnl || 0;
+            const pnlClass = pnl >= 0 ? 'profit' : 'loss';
+            const status = pos.status || 'OPEN';
+            const exitReason = pos.exit_reason || '';
+            const productType = pos.product_type || 'MIS';
+            const segment = pos.segment || 'EQUITY';
+            
+            let statusBadge = '';
+            if (status === 'CLOSED') {
+                if (exitReason === 'TARGET_HIT') {
+                    statusBadge = '<span style="background: rgba(0,255,136,0.2); color: #00ff88; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;">🎯 TARGET HIT</span>';
+                } else if (exitReason === 'SL_HIT') {
+                    statusBadge = '<span style="background: rgba(255,71,87,0.2); color: #ff4757; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;">⛔ SL HIT</span>';
+                } else {
+                    statusBadge = '<span style="background: rgba(52,152,219,0.2); color: #3498db; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;">⏰ MARKET CLOSE</span>';
+                }
+            } else {
+                statusBadge = '<span style="background: rgba(0,212,170,0.2); color: #00d4aa; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;">📈 OPEN</span>';
+            }
+            
+            const productBadge = productType === 'CNC' 
+                ? '<span style="background: rgba(155,89,182,0.2); color: #9b59b6; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.6rem; font-weight: 600;">CNC</span>'
+                : '<span style="background: rgba(52,152,219,0.2); color: #3498db; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.6rem; font-weight: 600;">MIS</span>';
+            
+            return `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 1rem;">
+                <!-- Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        ${statusBadge}
+                        <div style="font-weight: 700; font-size: 1rem;">${pos.symbol}</div>
+                        <span class="signal-badge ${pos.signal === 'BUY' ? 'buy' : 'sell'}" style="padding: 0.15rem 0.4rem; font-size: 0.6rem;">${pos.signal}</span>
+                        ${productBadge}
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="pnl ${pnlClass}" style="font-weight: 800; font-size: 1.1rem;">${pnl >= 0 ? '+' : ''}₹${Math.abs(pnl).toFixed(0)}</div>
+                        <div style="font-size: 0.65rem; color: #888;">Qty: ${pos.quantity}</div>
+                    </div>
+                </div>
+                
+                <!-- Price Grid -->
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; font-size: 0.75rem;">
+                    <div style="text-align: center; padding: 0.4rem; background: rgba(0,212,170,0.1); border-radius: 6px;">
+                        <div style="color: #888; font-size: 0.6rem; margin-bottom: 0.2rem;">ENTRY</div>
+                        <div style="font-weight: 600; color: #00d4aa;">₹${entryPrice.toFixed(2)}</div>
+                        <div style="color: #666; font-size: 0.55rem;">${pos.entry_time || '--'}</div>
+                    </div>
+                    <div style="text-align: center; padding: 0.4rem; background: rgba(255,71,87,0.1); border-radius: 6px;">
+                        <div style="color: #888; font-size: 0.6rem; margin-bottom: 0.2rem;">STOP LOSS</div>
+                        <div style="font-weight: 600; color: #ff4757;">₹${sl > 0 ? sl.toFixed(2) : '--'}</div>
+                    </div>
+                    <div style="text-align: center; padding: 0.4rem; background: rgba(0,255,136,0.1); border-radius: 6px;">
+                        <div style="color: #888; font-size: 0.6rem; margin-bottom: 0.2rem;">TARGET</div>
+                        <div style="font-weight: 600; color: #00ff88;">₹${target > 0 ? target.toFixed(2) : '--'}</div>
+                    </div>
+                    <div style="text-align: center; padding: 0.4rem; background: rgba(255,165,2,0.1); border-radius: 6px;">
+                        <div style="color: #888; font-size: 0.6rem; margin-bottom: 0.2rem;">TRAIL SL</div>
+                        <div style="font-weight: 600; color: #ffa502;">₹${trailSl > 0 ? trailSl.toFixed(2) : '--'}</div>
+                    </div>
+                    <div style="text-align: center; padding: 0.4rem; background: rgba(52,152,219,0.1); border-radius: 6px;">
+                        <div style="color: #888; font-size: 0.6rem; margin-bottom: 0.2rem;">EXIT</div>
+                        <div style="font-weight: 600; color: #3498db;">₹${exitPrice > 0 ? exitPrice.toFixed(2) : '--'}</div>
+                        <div style="color: #666; font-size: 0.55rem;">${pos.exit_time || '--'}</div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        // Load trading dates on page load
+        loadTradingDates();
     </script>
 </body>
 </html>
