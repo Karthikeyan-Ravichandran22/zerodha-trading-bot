@@ -582,6 +582,15 @@ MIT License - Use at your own risk!
 
 ## 📝 Changelog
 
+### v1.2 (December 27, 2025) - Persistent Trade History
+- ✅ NEW: SQLite database for persistent trade history
+- ✅ All trades saved with Entry, SL, Target, Trail SL, Exit details
+- ✅ Date-wise trade viewing - click on any date to see that day's trades
+- ✅ MIS/CNC conversion tracking in database
+- ✅ New API: `/api/trading-dates` - Get list of trading dates
+- ✅ New API: `/api/positions/<date>` - Get trades for specific date
+- ✅ Trade data persists even after market close or server restart
+
 ### v1.1 (December 26, 2025) - Smart CNC Conversion
 - ✅ NEW: Smart CNC Conversion - Auto-converts profitable MIS to CNC at 2:30 PM and 3:00 PM
 - ✅ Conversion criteria: Potential profit > ₹100, currently in profit, > 0.5% to target
@@ -602,4 +611,4 @@ MIT License - Use at your own risk!
 
 ---
 
-*Last Updated: December 26, 2025*
+*Last Updated: December 27, 2025*
