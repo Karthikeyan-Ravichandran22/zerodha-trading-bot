@@ -1281,7 +1281,15 @@ DASHBOARD_HTML = """
                 // Show loading indicator
                 document.getElementById('log-status').innerHTML = '<i class="fas fa-sync fa-spin"></i> Refreshing...';
                 
-                const res = await fetch('/api/dashboard');
+                // Add timeout to prevent hanging
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
+                
+                const res = await fetch('/api/dashboard', { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
+                if (!res.ok) throw new Error('Server error');
+                
                 const data = await res.json();
                 updateDashboard(data);
                 updatePnLChart(data);
@@ -1295,7 +1303,8 @@ DASHBOARD_HTML = """
                 document.getElementById('log-status').innerHTML = '<span class="live-dot"></span> Live - ' + timeNow;
             } catch (e) {
                 console.error('Fetch error:', e);
-                document.getElementById('log-status').innerHTML = '<i class="fas fa-exclamation-triangle" style="color:#ff4757;"></i> Connection Error';
+                // Show reconnecting status instead of error - will auto-retry in 3 seconds
+                document.getElementById('log-status').innerHTML = '<i class="fas fa-sync fa-spin" style="color:#ffa502;"></i> Reconnecting...';
             }
         };
         
