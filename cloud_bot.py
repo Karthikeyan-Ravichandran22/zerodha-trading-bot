@@ -916,6 +916,13 @@ class CloudTradingBot:
                     unrealised = float(pos.get('unrealised', 0) or 0)
                     pnl = float(pos.get('pnl', 0) or 0) or (realised + unrealised)
                     
+                    # Get SL/Target/Trail from position manager if available
+                    pm_pos = position_manager.get_position(symbol)
+                    sl_price = pm_pos.get('sl_price', 0) if pm_pos else 0
+                    target_price = pm_pos.get('target_price', 0) if pm_pos else 0
+                    trail_sl = pm_pos.get('trail_sl', sl_price) if pm_pos else sl_price
+                    entry_time = pm_pos.get('entry_time', '') if pm_pos else ''
+                    
                     positions[symbol] = {
                         'symbol': symbol,
                         'signal': 'BUY' if net_qty > 0 else 'SELL' if net_qty < 0 else 'CLOSED',
@@ -929,7 +936,12 @@ class CloudTradingBot:
                         'exchange': exchange,
                         'segment': segment,
                         'cfbuyqty': int(pos.get('cfbuyqty', 0) or 0),
-                        'cfsellqty': int(pos.get('cfsellqty', 0) or 0)
+                        'cfsellqty': int(pos.get('cfsellqty', 0) or 0),
+                        # SL, Target, Trail Stop Loss for dashboard
+                        'sl_price': sl_price,
+                        'target_price': target_price,
+                        'trail_sl': trail_sl,
+                        'entry_time': entry_time
                     }
                 except Exception as pe:
                     logger.debug(f"Error parsing position: {pe}")
