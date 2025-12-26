@@ -22,7 +22,7 @@ class PositionManager:
     
     def add_position(self, symbol: str, entry_id: str, sl_id: Optional[str], 
                      target_id: Optional[str], qty: int, entry_price: float,
-                     sl_price: float, target_price: float):
+                     sl_price: float, target_price: float, signal: str = "BUY"):
         """Add a new position to track"""
         self.positions[symbol] = {
             "entry_id": str(entry_id),
@@ -32,10 +32,11 @@ class PositionManager:
             "entry_price": entry_price,
             "sl_price": sl_price,
             "target_price": target_price,
+            "signal": signal,
             "entry_time": datetime.now().strftime("%H:%M:%S"),
             "status": "OPEN"
         }
-        logger.info(f"📋 Position tracked: {symbol} | Qty: {qty} | Entry: ₹{entry_price}")
+        logger.info(f"📋 Position tracked: {symbol} | {signal} | Qty: {qty} | Entry: ₹{entry_price}")
         logger.info(f"   SL Order: {sl_id} | Target Order: {target_id}")
     
     def get_position(self, symbol: str) -> Optional[dict]:

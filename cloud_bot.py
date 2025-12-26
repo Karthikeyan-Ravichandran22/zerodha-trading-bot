@@ -670,7 +670,8 @@ class CloudTradingBot:
                     qty=signal.quantity,
                     entry_price=signal.entry_price,
                     sl_price=signal.stop_loss,
-                    target_price=signal.target
+                    target_price=signal.target,
+                    signal=signal.signal.value
                 )
                 
                 # Record trade in journal
@@ -712,21 +713,105 @@ class CloudTradingBot:
                 logger.warning(f"   ⚠️ Not authenticated - Cannot execute order")
         
         # Record trade
-        self.today_trades.append({
+        trade_data = {
             "symbol": signal.symbol,
+            "signal": signal.signal.value,
             "action": signal.signal.value,
             "entry": signal.entry_price,
+            "entry_price": signal.entry_price,
             "target": signal.target,
             "sl": signal.stop_loss,
+            "sl_price": signal.stop_loss,
             "qty": signal.quantity,
+            "quantity": signal.quantity,
             "expected_charges": charges['total_charges'],
-            "time": datetime.now().strftime("%H:%M:%S")
-        })
+            "time": datetime.now(IST).strftime("%H:%M:%S"),
+            "pnl": 0  # Will be updated when closed
+        }
+        self.today_trades.append(trade_data)
+        
+        # Save trades to file for dashboard
+        self._save_trades_to_file()
+        
+        # Save positions to file for dashboard
+        self._save_positions_to_file(signal)
         
         # Add estimated charges
         self.today_charges += charges['total_charges']
         
         self.risk_manager.record_trade_entry()
+    
+    def _save_trades_to_file(self):
+        """Save today's trades to a JSON file for dashboard display"""
+        try:
+            os.makedirs('data', exist_ok=True)
+            trades_data = {
+                'date': datetime.now(IST).strftime('%Y-%m-%d'),
+                'trades': self.today_trades,
+                'total_pnl': self.today_pnl,
+                'total_charges': self.today_charges,
+                'trade_count': len(self.today_trades)
+            }
+            with open('data/today_trades.json', 'w') as f:
+                json.dump(trades_data, f, indent=2)
+            logger.debug(f"✅ Saved {len(self.today_trades)} trades to dashboard file")
+        except Exception as e:
+            logger.debug(f"Failed to save trades file: {e}")
+    
+    def _save_positions_to_file(self, signal=None):
+        """Save open positions to a JSON file for dashboard display"""
+        try:
+            os.makedirs('data', exist_ok=True)
+            positions = {}
+            
+            # Get positions from position_manager
+            open_positions = position_manager.get_open_positions()
+            for symbol in open_positions:
+                pos = position_manager.get_position(symbol)
+                if pos:
+                    positions[symbol] = {
+                        'symbol': symbol,
+                        'signal': pos.get('signal', 'BUY'),
+                        'entry_price': pos.get('entry_price', 0),
+                        'sl_price': pos.get('sl_price', 0),
+                        'trail_sl': pos.get('trail_sl', pos.get('sl_price', 0)),
+                        'target_price': pos.get('target_price', 0),
+                        'qty': pos.get('qty', 0),
+                        'entry_time': pos.get('entry_time', datetime.now(IST).strftime('%H:%M:%S'))
+                    }
+            
+            # If we have a new signal, add it as a position
+            if signal and signal.symbol not in positions:
+                positions[signal.symbol] = {
+                    'symbol': signal.symbol,
+                    'signal': signal.signal.value,
+                    'entry_price': signal.entry_price,
+                    'sl_price': signal.stop_loss,
+                    'trail_sl': signal.stop_loss,
+                    'target_price': signal.target,
+                    'qty': signal.quantity,
+                    'entry_time': datetime.now(IST).strftime('%H:%M:%S')
+                }
+            
+            with open('data/stock_positions.json', 'w') as f:
+                json.dump(positions, f, indent=2)
+            logger.debug(f"✅ Saved {len(positions)} positions to dashboard file")
+        except Exception as e:
+            logger.debug(f"Failed to save positions file: {e}")
+    
+    def _update_dashboard_files(self):
+        """Periodically update all dashboard files for real-time display"""
+        try:
+            # Update trades file
+            self._save_trades_to_file()
+            
+            # Update positions file
+            self._save_positions_to_file()
+            
+            # Update broker status
+            self.refresh_balance()
+        except Exception as e:
+            logger.debug(f"Dashboard update failed: {e}")
     
     def daily_summary(self):
         """Print daily summary with brokerage included"""
@@ -899,6 +984,7 @@ NET P&L: ₹{net_pnl:+,.2f}
         schedule.every().day.at("09:30").do(self.scan_for_signals)
         schedule.every(1).minutes.do(self.scan_for_signals)  # Scan every 1 minute
         schedule.every(5).minutes.do(self.refresh_balance)  # Refresh balance every 5 minutes
+        schedule.every(30).seconds.do(self._update_dashboard_files)  # Update dashboard every 30s
         schedule.every().day.at("14:15").do(lambda: logger.info("🟡 Trading window ended. No new trades."))
         schedule.every().day.at("14:30").do(lambda: logger.info("🥇 Commodity trading window started! (Gold paper trading)"))
         schedule.every().day.at("15:30").do(self.daily_summary)
