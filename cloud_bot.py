@@ -916,18 +916,41 @@ class CloudTradingBot:
                     unrealised = float(pos.get('unrealised', 0) or 0)
                     pnl = float(pos.get('pnl', 0) or 0) or (realised + unrealised)
                     
+                    # Get entry price for calculations
+                    entry_price = float(pos.get('averageprice', 0) or pos.get('buyavgprice', 0) or 0)
+                    
                     # Get SL/Target/Trail from position manager if available
                     pm_pos = position_manager.get_position(symbol)
-                    sl_price = pm_pos.get('sl_price', 0) if pm_pos else 0
-                    target_price = pm_pos.get('target_price', 0) if pm_pos else 0
-                    trail_sl = pm_pos.get('trail_sl', sl_price) if pm_pos else sl_price
-                    entry_time = pm_pos.get('entry_time', '') if pm_pos else ''
+                    
+                    if pm_pos and pm_pos.get('sl_price', 0) > 0:
+                        # Use stored values from position manager
+                        sl_price = pm_pos.get('sl_price', 0)
+                        target_price = pm_pos.get('target_price', 0)
+                        trail_sl = pm_pos.get('trail_sl', sl_price)
+                        entry_time = pm_pos.get('entry_time', '')
+                    else:
+                        # Auto-calculate default SL/Target based on strategy percentages
+                        # Default: 1.5% SL, 3% Target (2:1 Risk-Reward)
+                        signal_type = 'BUY' if net_qty > 0 else 'SELL'
+                        
+                        if signal_type == 'BUY' and entry_price > 0:
+                            sl_price = round(entry_price * 0.985, 2)  # 1.5% below entry
+                            target_price = round(entry_price * 1.03, 2)  # 3% above entry
+                        elif signal_type == 'SELL' and entry_price > 0:
+                            sl_price = round(entry_price * 1.015, 2)  # 1.5% above entry
+                            target_price = round(entry_price * 0.97, 2)  # 3% below entry
+                        else:
+                            sl_price = 0
+                            target_price = 0
+                        
+                        trail_sl = sl_price  # No trailing until price moves in favor
+                        entry_time = ''
                     
                     positions[symbol] = {
                         'symbol': symbol,
                         'signal': 'BUY' if net_qty > 0 else 'SELL' if net_qty < 0 else 'CLOSED',
                         'qty': abs(net_qty),
-                        'entry_price': float(pos.get('averageprice', 0) or pos.get('buyavgprice', 0) or 0),
+                        'entry_price': entry_price,
                         'ltp': float(pos.get('ltp', 0) or 0),
                         'pnl': pnl,
                         'realised_pnl': realised,
