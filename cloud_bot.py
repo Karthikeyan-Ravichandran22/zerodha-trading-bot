@@ -1161,32 +1161,55 @@ NET P&L: ₹{net_pnl:+,.2f}
     def refresh_balance(self):
         """Refresh broker balance and update dashboard (called periodically)"""
         try:
-            broker_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected'}
+            # Load existing status to preserve last known good state
+            existing_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected', 'broker_name': 'Not Connected'}
+            try:
+                if os.path.exists('data/zerodha_status.json'):
+                    with open('data/zerodha_status.json', 'r') as f:
+                        existing_status = json.load(f)
+            except:
+                pass
+            
+            broker_status = existing_status.copy()  # Start with previous state
             
             if self.is_authenticated:
+                broker_status['is_authenticated'] = True  # We know we're authenticated
+                
                 if hasattr(self, 'broker') and self.broker == 'angel':
                     # Angel One balance  
-                    funds = self.angel_client.rmsLimit()
-                    if funds.get('status'):
-                        available = float(funds['data'].get('net', 0))
-                        broker_status['balance'] = available
-                        profile = self.angel_client.getProfile(self.angel_refresh_token)
-                        broker_status['user_name'] = profile.get('data', {}).get('name', 'Connected')
-                        broker_status['is_authenticated'] = True
-                        broker_status['broker'] = 'Angel One'
-                        logger.debug(f"🔄 Balance refreshed: ₹{available:,.2f}")
+                    try:
+                        funds = self.angel_client.rmsLimit()
+                        if funds.get('status') and funds.get('data'):
+                            available = float(funds['data'].get('net', 0))
+                            broker_status['balance'] = available
+                            try:
+                                profile = self.angel_client.getProfile(self.angel_refresh_token)
+                                if profile.get('data'):
+                                    broker_status['user_name'] = profile['data'].get('name', broker_status.get('user_name', 'Connected'))
+                            except:
+                                pass  # Keep previous name if profile fails
+                            broker_status['broker_name'] = 'Angel One'
+                            logger.debug(f"🔄 Balance refreshed: ₹{available:,.2f}")
+                        else:
+                            # API failed but we're still authenticated, keep previous data
+                            logger.debug("Balance API returned no data, keeping previous state")
+                    except Exception as bal_err:
+                        # API error (common after market hours), keep previous state
+                        logger.debug(f"Balance API error: {bal_err}, keeping previous state")
+                        
                 elif self.client:
                     # Zerodha balance
-                    margins = self.client.get_margins()
-                    if margins and 'equity' in margins:
-                        available = margins['equity'].get('available', {}).get('live_balance', 0)
-                        broker_status['balance'] = available
-                        broker_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
-                        broker_status['is_authenticated'] = True
-                        broker_status['broker'] = 'Zerodha'
+                    try:
+                        margins = self.client.get_margins()
+                        if margins and 'equity' in margins:
+                            available = margins['equity'].get('available', {}).get('live_balance', 0)
+                            broker_status['balance'] = available
+                            broker_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
+                            broker_status['broker_name'] = 'Zerodha'
+                    except:
+                        pass
             
             # Save for dashboard
-            import json
             broker_status['last_updated'] = datetime.now(IST).strftime('%H:%M:%S IST')
             os.makedirs('data', exist_ok=True)
             with open('data/zerodha_status.json', 'w') as f:
@@ -1353,29 +1376,39 @@ Target: ₹{target_price:.2f}
         self.authenticate()
         
         # Get balance and save for dashboard
-        broker_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected'}
+        broker_status = {'is_authenticated': False, 'balance': 0, 'user_name': 'Not Connected', 'broker_name': 'Not Connected'}
         
         if self.is_authenticated:
+            broker_status['is_authenticated'] = True
             try:
                 if hasattr(self, 'broker') and self.broker == 'angel':
                     # Angel One balance
-                    funds = self.angel_client.rmsLimit()
-                    if funds.get('status'):
-                        available = float(funds['data'].get('net', 0))
-                        broker_status['balance'] = available
+                    broker_status['broker_name'] = 'Angel One'
+                    try:
+                        funds = self.angel_client.rmsLimit()
+                        if funds.get('status') and funds.get('data'):
+                            available = float(funds['data'].get('net', 0))
+                            broker_status['balance'] = available
+                    except:
+                        pass
+                    try:
                         profile = self.angel_client.getProfile(self.angel_refresh_token)
-                        broker_status['user_name'] = profile.get('data', {}).get('name', 'Connected')
-                        broker_status['is_authenticated'] = True
-                        broker_status['broker'] = 'Angel One'
+                        if profile.get('data'):
+                            broker_status['user_name'] = profile['data'].get('name', 'Connected')
+                    except:
+                        broker_status['user_name'] = 'Connected'
+                        
                 elif self.client:
                     # Zerodha balance
-                    margins = self.client.get_margins()
-                    if margins and 'equity' in margins:
-                        available = margins['equity'].get('available', {}).get('live_balance', 0)
-                        broker_status['balance'] = available
-                        broker_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
-                        broker_status['is_authenticated'] = True
-                        broker_status['broker'] = 'Zerodha'
+                    broker_status['broker_name'] = 'Zerodha'
+                    try:
+                        margins = self.client.get_margins()
+                        if margins and 'equity' in margins:
+                            available = margins['equity'].get('available', {}).get('live_balance', 0)
+                            broker_status['balance'] = available
+                            broker_status['user_name'] = self.client.kite.profile().get('user_name', 'Connected')
+                    except:
+                        broker_status['user_name'] = 'Connected'
             except Exception as e:
                 logger.info(f"🏦 Balance check failed: {e}")
         else:
@@ -1383,8 +1416,7 @@ Target: ₹{target_price:.2f}
         
         # Save status for web dashboard
         try:
-            import json
-            broker_status['last_updated'] = datetime.now().strftime('%H:%M:%S')
+            broker_status['last_updated'] = datetime.now(IST).strftime('%H:%M:%S IST')
             os.makedirs('data', exist_ok=True)
             with open('data/zerodha_status.json', 'w') as f:
                 json.dump(broker_status, f, indent=2)
