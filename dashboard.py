@@ -376,6 +376,24 @@ DASHBOARD_HTML = """
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate { animation: fadeIn 0.4s ease; }
         
+        @keyframes livePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.4); } 50% { opacity: 0.8; box-shadow: 0 0 10px 3px rgba(0, 255, 136, 0.2); } }
+        .live-pulse { animation: livePulse 2s infinite; }
+        
+        @keyframes dataFlow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .data-flow { background: linear-gradient(270deg, var(--bg-card), var(--bg-card-hover), var(--bg-card)); background-size: 200% 200%; animation: dataFlow 3s ease infinite; }
+        
+        @keyframes blink { 0%, 50%, 100% { opacity: 1; } 25%, 75% { opacity: 0.5; } }
+        .blink { animation: blink 1s infinite; }
+        
+        /* Segment Tags */
+        .segment-equity { background: rgba(0, 212, 170, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+        .segment-options { background: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid #ff6b6b; }
+        .segment-futures { background: rgba(102, 126, 234, 0.15); color: var(--accent-2); border: 1px solid var(--accent-2); }
+        .segment-commodity { background: rgba(255, 165, 2, 0.15); color: var(--warning); border: 1px solid var(--warning); }
+        
+        /* Live Indicator */
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--profit); animation: livePulse 1.5s infinite; display: inline-block; margin-right: 5px; }
+        
         /* Chart */
         .chart-container { height: 200px; position: relative; }
         
@@ -390,7 +408,7 @@ DASHBOARD_HTML = """
             font-size: 0.75rem; color: var(--text-secondary);
         }
         
-        .db-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--profit); }
+        .db-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--profit); animation: livePulse 2s infinite; }
     </style>
 </head>
 <body>
@@ -465,23 +483,23 @@ DASHBOARD_HTML = """
         
         <!-- Stats Grid -->
         <div class="stats-grid animate">
-            <div class="stat-card green">
-                <div class="stat-icon green"><i class="fas fa-university"></i></div>
-                <div class="stat-label">Angel One Balance</div>
-                <div class="stat-value" id="capital">Loading...</div>
-                <div class="stat-sub" id="broker-user"><i class="fas fa-user"></i> Connecting...</div>
+            <div class="stat-card green live-pulse">
+                <div class="stat-icon green"><i class="fas fa-chart-line"></i></div>
+                <div class="stat-label"><span class="live-dot"></span>Open Positions</div>
+                <div class="stat-value" id="capital">0</div>
+                <div class="stat-sub" id="broker-user"><i class="fas fa-exchange-alt"></i> <span id="total-positions-pnl">₹0 P&L</span></div>
             </div>
-            <div class="stat-card green">
+            <div class="stat-card green live-pulse">
                 <div class="stat-icon green"><i class="fas fa-rupee-sign"></i></div>
-                <div class="stat-label">Today's P&L</div>
+                <div class="stat-label"><span class="live-dot"></span>Today's P&L</div>
                 <div class="stat-value profit" id="today-pnl">+₹0</div>
                 <div class="stat-sub up" id="today-roi">+0.0% ROI</div>
             </div>
             <div class="stat-card blue">
-                <div class="stat-icon blue"><i class="fas fa-calendar-week"></i></div>
-                <div class="stat-label">This Week</div>
-                <div class="stat-value profit" id="week-pnl">+₹0</div>
-                <div class="stat-sub" id="week-trades">0 trades</div>
+                <div class="stat-icon blue"><i class="fas fa-receipt"></i></div>
+                <div class="stat-label">Today's Trades</div>
+                <div class="stat-value" id="today-trade-count">0</div>
+                <div class="stat-sub" id="week-trades">Executed</div>
             </div>
             <div class="stat-card blue">
                 <div class="stat-icon purple"><i class="fas fa-calendar"></i></div>
@@ -765,10 +783,6 @@ DASHBOARD_HTML = """
             
             // Week/Month stats from analytics
             if (data.analytics) {
-                const week = data.analytics.weekly || {};
-                document.getElementById('week-pnl').textContent = formatPnL(week.total_pnl || 0);
-                document.getElementById('week-trades').textContent = (week.total_trades || 0) + ' trades';
-                
                 const month = data.analytics.monthly || {};
                 document.getElementById('month-pnl').textContent = formatPnL(month.total_pnl || 0);
                 document.getElementById('month-trades').textContent = (month.total_trades || 0) + ' trades';
@@ -787,12 +801,19 @@ DASHBOARD_HTML = """
             document.getElementById('win-rate').textContent = winRate + '%';
             document.getElementById('trades-count').textContent = trades.length;
             document.getElementById('account-trades').textContent = trades.length;
+            document.getElementById('today-trade-count').textContent = trades.length;
             
             const watchlist = data.watchlist || [];
             const positions = data.positions || {};
+            const openPositions = Object.entries(positions).filter(([k, v]) => v.qty > 0);
+            const totalPnl = openPositions.reduce((sum, [k, v]) => sum + (v.unrealised_pnl || v.pnl || 0), 0);
+            
             document.getElementById('watchlist-count').textContent = watchlist.length;
-            document.getElementById('pos-count').textContent = Object.keys(positions).length;
-            document.getElementById('account-positions').textContent = Object.keys(positions).length;
+            document.getElementById('pos-count').textContent = openPositions.length;
+            document.getElementById('account-positions').textContent = openPositions.length;
+            document.getElementById('capital').textContent = openPositions.length;
+            document.getElementById('total-positions-pnl').textContent = formatPnL(totalPnl) + ' P&L';
+            document.getElementById('total-positions-pnl').style.color = totalPnl >= 0 ? '#00ff88' : '#ff4757';
             
             updatePositions(positions);
             updateWatchlist(watchlist);
@@ -801,24 +822,26 @@ DASHBOARD_HTML = """
         
         function updatePositions(positions) {
             const container = document.getElementById('positions-container');
-            const arr = Object.entries(positions);
+            const arr = Object.entries(positions).filter(([k, v]) => v.qty > 0);
             
             if (arr.length === 0) {
                 container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>';
                 return;
             }
             
-            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>Entry</th><th>LTP</th><th>P&L</th></tr></thead><tbody>';
+            let html = '<table><thead><tr><th>Stock</th><th>Segment</th><th>Type</th><th>LTP</th><th>P&L</th></tr></thead><tbody>';
             for (const [sym, pos] of arr) {
                 const ltp = pos.ltp || pos.entry_price || 0;
                 const pnl = pos.unrealised_pnl || pos.pnl || 0;
                 const pnlClass = pnl >= 0 ? 'profit' : 'loss';
-                html += `<tr>
-                    <td><div class="stock-cell"><div class="stock-avatar">${sym.substring(0,2)}</div><div class="stock-info"><h4>${sym}</h4><span>Qty: ${pos.qty}</span></div></div></td>
+                const segment = pos.segment || 'EQUITY';
+                const segmentClass = 'segment-' + segment.toLowerCase();
+                html += `<tr class="live-pulse">
+                    <td><div class="stock-cell"><span class="live-dot"></span><div class="stock-avatar">${sym.substring(0,2)}</div><div class="stock-info"><h4>${sym}</h4><span>Qty: ${pos.qty}</span></div></div></td>
+                    <td><span class="segment-tag ${segmentClass}" style="padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem;">${segment}</span></td>
                     <td><span class="signal-badge ${pos.signal === 'BUY' ? 'buy' : 'sell'}">${pos.signal}</span></td>
-                    <td>₹${(pos.entry_price || 0).toFixed(2)}</td>
-                    <td>₹${parseFloat(ltp).toFixed(2)}</td>
-                    <td><span class="pnl ${pnlClass}">${formatPnL(pnl)}</span></td>
+                    <td style="font-weight: 700;">₹${parseFloat(ltp).toFixed(2)}</td>
+                    <td><span class="pnl ${pnlClass}" style="font-weight: 800; font-size: 1rem;">${formatPnL(pnl)}</span></td>
                 </tr>`;
             }
             html += '</tbody></table>';
@@ -854,15 +877,18 @@ DASHBOARD_HTML = """
                 return;
             }
             
-            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>Price</th><th>Time (IST)</th></tr></thead><tbody>';
-            for (const t of trades.slice(0, 10)) {
+            let html = '<table><thead><tr><th>Stock</th><th>Segment</th><th>Type</th><th>Price</th><th>Time (IST)</th></tr></thead><tbody>';
+            for (const t of trades.slice(0, 15)) {
                 const time = t.time_ist || t.time || '--:--';
                 const price = t.entry_price || t.price || t.averageprice || 0;
+                const segment = t.segment || 'EQUITY';
+                const segmentClass = 'segment-' + segment.toLowerCase();
                 html += `<tr>
                     <td><div class="stock-cell"><div class="stock-avatar">${(t.symbol || '').substring(0,2)}</div><div class="stock-info"><h4>${t.symbol}</h4><span>Qty: ${t.qty || t.quantity || 0}</span></div></div></td>
+                    <td><span class="segment-tag ${segmentClass}" style="padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.65rem;">${segment}</span></td>
                     <td><span class="signal-badge ${t.signal === 'BUY' ? 'buy' : 'sell'}">${t.signal}</span></td>
-                    <td>₹${parseFloat(price).toFixed(2)}</td>
-                    <td style="font-size: 0.75rem; color: #888;">${time}</td>
+                    <td style="font-weight: 600;">₹${parseFloat(price).toFixed(2)}</td>
+                    <td style="font-size: 0.75rem; color: #00d4aa; font-weight: 500;">${time}</td>
                 </tr>`;
             }
             html += '</tbody></table>';
@@ -1027,6 +1053,9 @@ DASHBOARD_HTML = """
         // Override fetchData to include new updates
         fetchData = async function() {
             try {
+                // Show loading indicator
+                document.getElementById('log-status').innerHTML = '<i class="fas fa-sync fa-spin"></i> Refreshing...';
+                
                 const res = await fetch('/api/dashboard');
                 const data = await res.json();
                 updateDashboard(data);
@@ -1034,14 +1063,19 @@ DASHBOARD_HTML = """
                 updateRiskMeter(data);
                 updateLivePrices(data.watchlist);
                 updateActivityLog(data.activity_logs || []);
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false, timeZone: 'Asia/Kolkata'}) + ' IST';
+                
+                // Update timestamp with live indicator
+                const timeNow = new Date().toLocaleTimeString('en-IN', {hour12: false, timeZone: 'Asia/Kolkata'});
+                document.getElementById('last-update').textContent = timeNow + ' IST';
+                document.getElementById('log-status').innerHTML = '<span class="live-dot"></span> Live - ' + timeNow;
             } catch (e) {
                 console.error('Fetch error:', e);
+                document.getElementById('log-status').innerHTML = '<i class="fas fa-exclamation-triangle" style="color:#ff4757;"></i> Connection Error';
             }
         };
         
         fetchData();
-        setInterval(fetchData, 5000);  // Update every 5 seconds for more responsive logs
+        setInterval(fetchData, 3000);  // Update every 3 seconds for LIVE feel
     </script>
 </body>
 </html>

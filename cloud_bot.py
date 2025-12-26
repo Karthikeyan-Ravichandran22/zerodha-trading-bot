@@ -809,34 +809,56 @@ class CloudTradingBot:
             
             # Get today's orders from Angel One
             order_book = self.angel_client.orderBook()
-            if not order_book.get('status') or not order_book.get('data'):
+            if not order_book or not order_book.get('status') or not order_book.get('data'):
                 return []
             
             trades = []
             today_str = datetime.now(IST).strftime('%Y-%m-%d')
             
             for order in order_book['data']:
-                # Only completed orders from today
-                if order.get('status') in ['complete', 'filled']:
+                try:
+                    # Only completed/filled orders
+                    status = order.get('status', '').lower()
+                    if status not in ['complete', 'filled', 'traded']:
+                        continue
+                    
                     # Parse order time
                     order_time = order.get('updatetime', order.get('ordertime', ''))
+                    symbol = order.get('tradingsymbol', '').replace('-EQ', '').replace('-BE', '')
+                    exchange = order.get('exchange', 'NSE')
+                    
+                    # Determine segment
+                    if exchange in ['NFO', 'BFO']:
+                        if 'CE' in symbol or 'PE' in symbol:
+                            segment = 'OPTIONS'
+                        else:
+                            segment = 'FUTURES'
+                    elif exchange in ['MCX', 'CDS']:
+                        segment = 'COMMODITY'
+                    else:
+                        segment = 'EQUITY'
                     
                     trade = {
-                        'symbol': order.get('tradingsymbol', '').replace('-EQ', ''),
+                        'symbol': symbol,
                         'signal': order.get('transactiontype', 'BUY'),
                         'action': order.get('transactiontype', 'BUY'),
-                        'entry_price': float(order.get('averageprice', 0) or 0),
-                        'qty': int(order.get('filledshares', 0) or order.get('quantity', 0)),
-                        'quantity': int(order.get('filledshares', 0) or order.get('quantity', 0)),
+                        'entry_price': float(order.get('averageprice', 0) or order.get('price', 0) or 0),
+                        'qty': int(order.get('filledshares', 0) or order.get('quantity', 0) or 0),
+                        'quantity': int(order.get('filledshares', 0) or order.get('quantity', 0) or 0),
                         'order_id': order.get('orderid', ''),
                         'time': order_time.split(' ')[-1] if ' ' in order_time else order_time,
                         'time_ist': order_time.split(' ')[-1] if ' ' in order_time else order_time,
-                        'pnl': 0,  # Calculate P&L from positions
-                        'status': 'executed',
+                        'pnl': 0,
+                        'status': 'EXECUTED',
                         'product': order.get('producttype', 'INTRADAY'),
-                        'exchange': order.get('exchange', 'NSE')
+                        'exchange': exchange,
+                        'segment': segment,
+                        'order_status': status.upper()
                     }
                     trades.append(trade)
+                except Exception as te:
+                    logger.debug(f"Error parsing trade: {te}")
+                    continue
             
             logger.debug(f"📊 Fetched {len(trades)} executed trades from Angel One")
             return trades
@@ -853,28 +875,67 @@ class CloudTradingBot:
             
             # Get positions from Angel One
             positions_resp = self.angel_client.position()
-            if not positions_resp.get('status') or not positions_resp.get('data'):
+            
+            # Handle empty or error responses
+            if not positions_resp:
+                logger.debug("No position response from Angel One")
+                return {}
+            
+            if not positions_resp.get('status'):
+                logger.debug(f"Position fetch failed: {positions_resp.get('message', 'Unknown error')}")
+                return {}
+            
+            data = positions_resp.get('data')
+            if not data:
+                logger.debug("No position data from Angel One")
                 return {}
             
             positions = {}
-            for pos in positions_resp['data']:
-                # Only open positions with quantity
-                net_qty = int(pos.get('netqty', 0))
-                if net_qty != 0:
-                    symbol = pos.get('tradingsymbol', '').replace('-EQ', '')
+            for pos in data:
+                try:
+                    # Get quantity - could be netqty or quantity
+                    net_qty = int(pos.get('netqty', 0) or pos.get('quantity', 0) or 0)
+                    
+                    # Include ALL positions (even with 0 qty for display)
+                    symbol = pos.get('tradingsymbol', '').replace('-EQ', '').replace('-BE', '')
+                    exchange = pos.get('exchange', 'NSE')
+                    
+                    # Determine segment based on exchange and symbol
+                    if exchange in ['NFO', 'BFO']:
+                        if 'CE' in symbol or 'PE' in symbol:
+                            segment = 'OPTIONS'
+                        else:
+                            segment = 'FUTURES'
+                    elif exchange in ['MCX', 'CDS']:
+                        segment = 'COMMODITY'
+                    else:
+                        segment = 'EQUITY'
+                    
+                    # Get P&L values
+                    realised = float(pos.get('realised', 0) or 0)
+                    unrealised = float(pos.get('unrealised', 0) or 0)
+                    pnl = float(pos.get('pnl', 0) or 0) or (realised + unrealised)
+                    
                     positions[symbol] = {
                         'symbol': symbol,
-                        'signal': 'BUY' if net_qty > 0 else 'SELL',
+                        'signal': 'BUY' if net_qty > 0 else 'SELL' if net_qty < 0 else 'CLOSED',
                         'qty': abs(net_qty),
-                        'entry_price': float(pos.get('averageprice', 0) or 0),
+                        'entry_price': float(pos.get('averageprice', 0) or pos.get('buyavgprice', 0) or 0),
                         'ltp': float(pos.get('ltp', 0) or 0),
-                        'pnl': float(pos.get('pnl', 0) or pos.get('realised', 0) or 0),
-                        'unrealised_pnl': float(pos.get('unrealised', 0) or 0),
+                        'pnl': pnl,
+                        'realised_pnl': realised,
+                        'unrealised_pnl': unrealised,
                         'product': pos.get('producttype', 'INTRADAY'),
-                        'exchange': pos.get('exchange', 'NSE')
+                        'exchange': exchange,
+                        'segment': segment,
+                        'cfbuyqty': int(pos.get('cfbuyqty', 0) or 0),
+                        'cfsellqty': int(pos.get('cfsellqty', 0) or 0)
                     }
+                except Exception as pe:
+                    logger.debug(f"Error parsing position: {pe}")
+                    continue
             
-            logger.debug(f"📊 Fetched {len(positions)} open positions from Angel One")
+            logger.debug(f"📊 Fetched {len(positions)} positions from Angel One")
             return positions
             
         except Exception as e:
