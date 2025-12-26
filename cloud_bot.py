@@ -330,18 +330,45 @@ class CloudTradingBot:
     
     def _get_angel_token(self, symbol: str) -> str:
         """Get Angel One symbol token (cached)"""
-        # Common NSE tokens - add more as needed
+        # Normalize symbol
+        symbol = symbol.upper().replace(' ', '').replace('-EQ', '')
+        
+        # Extended token map for all watchlist stocks
         tokens = {
+            # Current watchlist stocks
+            "IRFC": "4717", "TATASTEEL": "3499", "GAIL": "4717", "CANBK": "10794",
+            "REC": "15355", "NTPC": "11630", "DLF": "14732", "GODREJPROP": "17875",
+            "YESBANK": "11915", "NMDC": "4164",
+            # Alternative names
+            "TATASTEEL": "3499", "CANARABANK": "10794", "GODREJPROPERTIES": "17875",
+            # Other common stocks
             "SBIN": "3045", "RELIANCE": "2885", "INFY": "1594", "TCS": "11536",
             "HDFCBANK": "1333", "ICICIBANK": "4963", "KOTAKBANK": "1922",
-            "TATAMOTORS": "3456", "TATASTEEL": "3499", "SAIL": "2963",
-            "PNB": "10666", "IRFC": "3041", "IDEA": "14366", "CANBK": "10794",
+            "TATAMOTORS": "3456", "SAIL": "2963", "PNB": "10666", "IDEA": "14366",
             "IDFCFIRSTB": "11184", "ITC": "1660", "COALINDIA": "20374",
             "ONGC": "2475", "BANKBARODA": "4668", "UNIONBANK": "13459",
             "IOC": "1624", "BPCL": "526", "HINDALCO": "348", "VEDL": "3063",
-            "JINDALSTEL": "6733", "NMDC": "4164", "NTPC": "11630"
+            "JINDALSTEL": "6733"
         }
-        return tokens.get(symbol, "0")
+        
+        # Try direct lookup
+        if symbol in tokens:
+            return tokens[symbol]
+        
+        # Try to fetch dynamically from Angel API
+        try:
+            if hasattr(self, 'angel_client') and self.angel_client:
+                search_result = self.angel_client.searchScrip("NSE", symbol)
+                if search_result and search_result.get('data'):
+                    for item in search_result['data']:
+                        if item.get('tradingsymbol', '').upper() == f"{symbol}-EQ":
+                            logger.info(f"🔍 Found token for {symbol}: {item.get('symboltoken')}")
+                            return item.get('symboltoken', '0')
+        except Exception as e:
+            logger.debug(f"Token search failed for {symbol}: {e}")
+        
+        logger.warning(f"⚠️ No token found for {symbol}")
+        return "0"
     def is_market_open(self) -> bool:
         """Check if market is open (IST timezone)"""
         now = datetime.now(IST)
