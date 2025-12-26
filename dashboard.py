@@ -500,17 +500,81 @@ DASHBOARD_HTML = """
                 <div class="stat-label">Watchlist</div>
                 <div class="stat-value" id="watchlist-count">0</div>
                 <div class="stat-sub">80%+ Win Rate Only</div>
+        </div>
+        
+        <!-- ROW 1: P&L Chart + Risk Meter (TOP) -->
+        <div class="grid-2 animate">
+            <!-- P&L Chart -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-chart-area"></i> Daily P&L Chart</h2>
+                </div>
+                <div class="chart-container" style="height: 220px;">
+                    <canvas id="pnlChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Risk Meter -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Risk Meter</h2>
+                </div>
+                <div style="text-align: center; padding: 0.5rem;">
+                    <div id="risk-gauge" style="position: relative; width: 180px; height: 100px; margin: 0 auto;">
+                        <svg viewBox="0 0 200 120" style="width: 100%;">
+                            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#333" stroke-width="15"/>
+                            <path id="risk-arc" d="M 20 100 A 80 80 0 0 1 100 20" fill="none" stroke="url(#riskGradient)" stroke-width="15" stroke-linecap="round"/>
+                            <defs>
+                                <linearGradient id="riskGradient">
+                                    <stop offset="0%" stop-color="#00ff88"/>
+                                    <stop offset="50%" stop-color="#ffa502"/>
+                                    <stop offset="100%" stop-color="#ff4757"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); text-align: center;">
+                            <div id="risk-value" style="font-size: 1.5rem; font-weight: 800; color: #00ff88;">LOW</div>
+                            <div id="risk-percent" style="font-size: 0.7rem; color: #888;">0% Exposure</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-around; margin-top: 0.5rem; font-size: 0.7rem;">
+                        <div><span style="color: #00ff88;">●</span> Low</div>
+                        <div><span style="color: #ffa502;">●</span> Medium</div>
+                        <div><span style="color: #ff4757;">●</span> High</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem;">
+                        <div style="background: var(--bg-card); padding: 0.5rem; border-radius: 8px;">
+                            <div style="color: #888;">Open Pos</div>
+                            <div id="risk-positions" style="font-weight: 700; font-size: 1.2rem;">0</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 0.5rem; border-radius: 8px;">
+                            <div style="color: #888;">At Risk</div>
+                            <div id="risk-capital" style="font-weight: 700; color: #00ff88; font-size: 1.2rem;">₹0</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
-        <!-- Grid Layout -->
+        <!-- ROW 2: Live Activity Log + Open Positions + Today's Trades -->
         <div class="grid-3 animate">
+            <!-- Live Activity Log -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-terminal"></i> Live Activity Log</h2>
+                    <span id="log-status" style="font-size: 0.65rem; color: #00ff88;"><i class="fas fa-circle fa-xs"></i> Live</span>
+                </div>
+                <div id="activity-log" style="height: 200px; overflow-y: auto; font-family: 'Monaco', 'Consolas', monospace; font-size: 0.7rem; padding: 0.5rem; background: #0a0a0f; border-radius: 8px;">
+                    <div class="log-entry" style="color: #888;">Waiting for activity...</div>
+                </div>
+            </div>
+            
             <!-- Open Positions -->
             <div class="section">
                 <div class="section-header">
                     <h2 class="section-title"><i class="fas fa-chart-line"></i> Open Positions <span class="badge" id="pos-count">0</span></h2>
                 </div>
-                <div id="positions-container">
+                <div id="positions-container" style="max-height: 200px; overflow-y: auto;">
                     <div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>
                 </div>
             </div>
@@ -520,16 +584,31 @@ DASHBOARD_HTML = """
                 <div class="section-header">
                     <h2 class="section-title"><i class="fas fa-history"></i> Today's Trades <span class="badge" id="trades-count">0</span></h2>
                 </div>
-                <div id="trades-container">
+                <div id="trades-container" style="max-height: 200px; overflow-y: auto;">
                     <div class="empty-state"><i class="fas fa-calendar-day"></i><p>No trades today</p></div>
                 </div>
             </div>
-            
-            <!-- All-Time Stats -->
-            <div class="section">
-                <div class="section-header">
-                    <h2 class="section-title"><i class="fas fa-trophy"></i> All-Time Stats</h2>
-                </div>
+        </div>
+        
+        <!-- ROW 3: Live Stock Prices -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-bolt"></i> Live Stock Prices</h2>
+                <span id="price-update-time" style="font-size: 0.75rem; color: var(--text-secondary);">
+                    <i class="fas fa-clock"></i> Updated: --
+                </span>
+            </div>
+            <div id="live-prices-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem;">
+                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading prices...</p></div>
+            </div>
+        </div>
+        
+        <!-- ROW 4: All-Time Stats -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-trophy"></i> All-Time Performance</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
                 <div class="perf-card">
                     <div class="perf-title">TOTAL P&L</div>
                     <div class="perf-value profit" id="all-time-pnl">+₹0</div>
@@ -569,80 +648,6 @@ DASHBOARD_HTML = """
                 </thead>
                 <tbody id="watchlist-body"></tbody>
             </table>
-        </div>
-        
-        <!-- New Row: P&L Chart + Risk Meter -->
-        <div class="grid-2 animate">
-            <!-- P&L Chart -->
-            <div class="section">
-                <div class="section-header">
-                    <h2 class="section-title"><i class="fas fa-chart-line"></i> Daily P&L Chart</h2>
-                </div>
-                <div class="chart-container" style="height: 250px;">
-                    <canvas id="pnlChart"></canvas>
-                </div>
-            </div>
-            
-            <!-- Risk Meter -->
-            <div class="section">
-                <div class="section-header">
-                    <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Risk Meter</h2>
-                </div>
-                <div style="text-align: center; padding: 1rem;">
-                    <div id="risk-gauge" style="position: relative; width: 200px; height: 120px; margin: 0 auto;">
-                        <svg viewBox="0 0 200 120" style="width: 100%;">
-                            <!-- Background arc -->
-                            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#333" stroke-width="15"/>
-                            <!-- Risk arc -->
-                            <path id="risk-arc" d="M 20 100 A 80 80 0 0 1 100 20" fill="none" stroke="url(#riskGradient)" stroke-width="15" stroke-linecap="round"/>
-                            <defs>
-                                <linearGradient id="riskGradient">
-                                    <stop offset="0%" stop-color="#00ff88"/>
-                                    <stop offset="50%" stop-color="#ffa502"/>
-                                    <stop offset="100%" stop-color="#ff4757"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
-                        <div style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); text-align: center;">
-                            <div id="risk-value" style="font-size: 2rem; font-weight: 800; color: #00ff88;">LOW</div>
-                            <div id="risk-percent" style="font-size: 0.8rem; color: #888;">0% Exposure</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-around; margin-top: 1rem; font-size: 0.75rem;">
-                        <div><span style="color: #00ff88;">●</span> Low (0-30%)</div>
-                        <div><span style="color: #ffa502;">●</span> Medium (30-60%)</div>
-                        <div><span style="color: #ff4757;">●</span> High (60%+)</div>
-                    </div>
-                    <div class="perf-card" style="margin-top: 1rem;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <div><span style="color: #888;">Open Positions:</span></div>
-                            <div id="risk-positions" style="font-weight: 700;">0</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">
-                            <div><span style="color: #888;">Capital at Risk:</span></div>
-                            <div id="risk-capital" style="font-weight: 700; color: #00ff88;">₹0</div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">
-                            <div><span style="color: #888;">Max Daily Loss:</span></div>
-                            <div style="font-weight: 700; color: #ff4757;">₹500 (5%)</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Live Stock Prices -->
-        <div class="section animate" style="margin-bottom: 1.5rem;">
-            <div class="section-header">
-                <h2 class="section-title"><i class="fas fa-bolt"></i> Live Stock Prices</h2>
-                <span id="price-update-time" style="font-size: 0.75rem; color: var(--text-secondary);">
-                    <i class="fas fa-clock"></i> Updated: --
-                </span>
-            </div>
-            <div id="live-prices-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem;">
-                <!-- Prices will be populated by JS -->
-                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading prices...</p></div>
-            </div>
         </div>
     </main>
     
@@ -910,8 +915,62 @@ DASHBOARD_HTML = """
         // Initialize chart on load
         document.addEventListener('DOMContentLoaded', initPnLChart);
         
+        // Live Activity Log
+        function updateActivityLog(logs) {
+            const container = document.getElementById('activity-log');
+            if (!logs || logs.length === 0) {
+                container.innerHTML = '<div class="log-entry" style="color: #888;">Waiting for activity...</div>';
+                return;
+            }
+            
+            let html = '';
+            for (const log of logs.slice(-20)) {  // Show last 20 logs
+                let color = '#888';
+                let icon = 'fa-info-circle';
+                
+                if (log.includes('SIGNAL') || log.includes('🎯')) {
+                    color = '#00ff88';
+                    icon = 'fa-bullseye';
+                } else if (log.includes('Scanning') || log.includes('🔍')) {
+                    color = '#3498db';
+                    icon = 'fa-search';
+                } else if (log.includes('Skipping') || log.includes('⚠️')) {
+                    color = '#ffa502';
+                    icon = 'fa-exclamation-triangle';
+                } else if (log.includes('ORDER') || log.includes('✅')) {
+                    color = '#00ff88';
+                    icon = 'fa-check-circle';
+                } else if (log.includes('ERROR') || log.includes('❌')) {
+                    color = '#ff4757';
+                    icon = 'fa-times-circle';
+                } else if (log.includes('Indicators')) {
+                    color = '#667eea';
+                    icon = 'fa-chart-bar';
+                } else if (log.includes('Candle') || log.includes('Red')) {
+                    color = '#e17055';
+                    icon = 'fa-fire';
+                }
+                
+                html += `<div class="log-entry" style="color: ${color}; padding: 0.25rem 0; border-bottom: 1px solid #1a1a28;">
+                    <i class="fas ${icon}" style="width: 16px; margin-right: 5px;"></i>${log}
+                </div>`;
+            }
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;  // Auto-scroll to bottom
+        }
+        
+        // Fetch activity logs
+        async function fetchActivityLogs() {
+            try {
+                const res = await fetch('/api/activity');
+                const data = await res.json();
+                updateActivityLog(data.logs || []);
+            } catch (e) {
+                console.debug('Activity logs not available');
+            }
+        }
+        
         // Override fetchData to include new updates
-        const originalFetchData = fetchData;
         fetchData = async function() {
             try {
                 const res = await fetch('/api/dashboard');
@@ -920,6 +979,7 @@ DASHBOARD_HTML = """
                 updatePnLChart(data);
                 updateRiskMeter(data);
                 updateLivePrices(data.watchlist);
+                updateActivityLog(data.activity_logs || []);
                 document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false});
             } catch (e) {
                 console.error('Fetch error:', e);
@@ -927,7 +987,7 @@ DASHBOARD_HTML = """
         };
         
         fetchData();
-        setInterval(fetchData, 10000);
+        setInterval(fetchData, 5000);  // Update every 5 seconds for more responsive logs
     </script>
 </body>
 </html>
@@ -1010,6 +1070,15 @@ def get_dashboard_data():
                 }
     except:
         data['broker'] = {'balance': 0, 'user_name': 'Not Connected', 'is_authenticated': False}
+    
+    # Load activity logs
+    try:
+        if os.path.exists("data/activity_logs.json"):
+            with open("data/activity_logs.json", 'r') as f:
+                logs_data = json.load(f)
+                data['activity_logs'] = logs_data.get('logs', [])[-30:]  # Last 30 logs
+    except:
+        data['activity_logs'] = []
     
     return data
 

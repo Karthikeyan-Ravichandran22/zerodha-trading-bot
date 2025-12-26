@@ -24,6 +24,36 @@ logger.remove()
 logger.add(sys.stdout, format="{time:HH:mm:ss} | {level} | {message}", level="INFO")
 logger.add("logs/cloud_bot.log", rotation="1 day", retention="7 days")
 
+# Activity log handler for dashboard
+import json
+activity_logs = []
+MAX_ACTIVITY_LOGS = 50
+
+def activity_log_handler(message):
+    """Save important logs to activity file for dashboard display"""
+    global activity_logs
+    record = message.record
+    msg = record["message"]
+    
+    # Only save important logs (not HTTP requests)
+    if any(x in msg for x in ['Scanning', 'SIGNAL', 'Indicators', 'Candle', 'Skipping', 'ORDER', 'Error', '🔍', '🎯', '⚠️', '✅', '❌']):
+        log_entry = f"{record['time'].strftime('%H:%M:%S')} | {msg}"
+        activity_logs.append(log_entry)
+        
+        # Keep only last N logs
+        if len(activity_logs) > MAX_ACTIVITY_LOGS:
+            activity_logs = activity_logs[-MAX_ACTIVITY_LOGS:]
+        
+        # Save to file
+        try:
+            os.makedirs('data', exist_ok=True)
+            with open('data/activity_logs.json', 'w') as f:
+                json.dump({'logs': activity_logs}, f)
+        except:
+            pass
+
+logger.add(activity_log_handler, format="{message}", level="INFO")
+
 from core.risk_manager import RiskManager
 from core.data_fetcher import DataFetcher
 from core.zerodha_client import get_zerodha_client
