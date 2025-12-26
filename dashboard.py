@@ -754,67 +754,90 @@ DASHBOARD_HTML = """
             }
         }
         
+        // Safe element setter helper - prevents null reference errors
+        function setEl(id, prop, value) {
+            const el = document.getElementById(id);
+            if (el) {
+                if (prop === 'textContent' || prop === 'innerHTML') {
+                    el[prop] = value;
+                } else if (prop === 'className') {
+                    el.className = value;
+                } else if (prop.startsWith('style.')) {
+                    el.style[prop.replace('style.', '')] = value;
+                }
+            }
+            return el;
+        }
+        
         function updateDashboard(data) {
-            // Show Angel One balance
+            // Extract data first
             const broker = data.broker || {};
             const balance = broker.balance || data.capital || 0;
             const userName = broker.user_name || 'Not Connected';
             const isConnected = broker.is_authenticated || false;
-            
-            // Update open positions count (set later after filtering positions)
-            document.getElementById('broker-user').innerHTML = isConnected 
-                ? '<i class="fas fa-check-circle" style="color:#00ff88"></i> ' + userName
-                : '<i class="fas fa-times-circle" style="color:#ff4757"></i> ' + userName;
-            
-            // Update Account Details Section
-            document.getElementById('account-balance').textContent = formatCurrency(balance);
-            document.getElementById('account-name').textContent = userName;
-            document.getElementById('account-broker').textContent = broker.broker_name || 'Angel One';
-            document.getElementById('broker-connection').innerHTML = isConnected 
-                ? '<i class="fas fa-check-circle"></i> Connected'
-                : '<i class="fas fa-times-circle" style="color:#ff4757"></i> Disconnected';
-            document.getElementById('broker-connection').style.color = isConnected ? '#00ff88' : '#ff4757';
-            document.getElementById('account-updated').textContent = broker.last_updated || '--:--';
-            
-            const todayPnl = data.daily_pnl || 0;
-            document.getElementById('today-pnl').textContent = formatPnL(todayPnl);
-            document.getElementById('today-pnl').className = 'stat-value ' + (todayPnl >= 0 ? 'profit' : 'loss');
-            document.getElementById('today-roi').textContent = ((todayPnl / (balance || 10000)) * 100).toFixed(1) + '% ROI';
-            
-            // Week/Month stats from analytics
-            if (data.analytics) {
-                const month = data.analytics.monthly || {};
-                document.getElementById('month-pnl').textContent = formatPnL(month.total_pnl || 0);
-                document.getElementById('month-trades').textContent = (month.total_trades || 0) + ' trades';
-                
-                const allTime = data.analytics.all_time || {};
-                document.getElementById('all-time-pnl').textContent = formatPnL(allTime.total_pnl || 0);
-                document.getElementById('all-time-trades').textContent = (allTime.total_trades || 0) + ' total trades';
-                document.getElementById('all-time-wr').textContent = (allTime.win_rate || 0).toFixed(1) + '%';
-                document.getElementById('wr-bar').style.width = (allTime.win_rate || 0) + '%';
-                document.getElementById('profit-factor').textContent = (allTime.profit_factor || 0).toFixed(2);
-            }
-            
             const trades = data.trades || [];
-            const wins = trades.filter(t => t.pnl > 0).length;
-            const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : 0;
-            document.getElementById('win-rate').textContent = winRate + '%';
-            document.getElementById('trades-count').textContent = trades.length;
-            document.getElementById('account-trades').textContent = trades.length;
-            document.getElementById('today-trade-count').textContent = trades.length;
-            
             const watchlist = data.watchlist || [];
             const positions = data.positions || {};
             const openPositions = Object.entries(positions).filter(([k, v]) => v.qty > 0);
             const totalPnl = openPositions.reduce((sum, [k, v]) => sum + (v.unrealised_pnl || v.pnl || 0), 0);
             
-            document.getElementById('watchlist-count').textContent = watchlist.length;
-            document.getElementById('pos-count').textContent = openPositions.length;
-            document.getElementById('open-positions-count').textContent = openPositions.length;
-            document.getElementById('account-positions').textContent = openPositions.length;
-            document.getElementById('total-positions-pnl').textContent = formatPnL(totalPnl) + ' P&L';
-            document.getElementById('total-positions-pnl').style.color = totalPnl >= 0 ? '#00ff88' : '#ff4757';
+            // Safely update all UI elements with try-catch to prevent any errors from stopping table updates
+            try {
+                // Broker user badge
+                setEl('broker-user', 'innerHTML', isConnected 
+                    ? '<i class="fas fa-check-circle" style="color:#00ff88"></i> ' + userName
+                    : '<i class="fas fa-times-circle" style="color:#ff4757"></i> ' + userName);
+                
+                // Account Details Section
+                setEl('account-balance', 'textContent', formatCurrency(balance));
+                setEl('account-name', 'textContent', userName);
+                setEl('account-broker', 'textContent', broker.broker_name || 'Angel One');
+                setEl('broker-connection', 'innerHTML', isConnected 
+                    ? '<i class="fas fa-check-circle"></i> Connected'
+                    : '<i class="fas fa-times-circle" style="color:#ff4757"></i> Disconnected');
+                setEl('broker-connection', 'style.color', isConnected ? '#00ff88' : '#ff4757');
+                setEl('account-updated', 'textContent', broker.last_updated || '--:--');
+                
+                // Today's P&L
+                const todayPnl = data.daily_pnl || 0;
+                setEl('today-pnl', 'textContent', formatPnL(todayPnl));
+                setEl('today-pnl', 'className', 'stat-value ' + (todayPnl >= 0 ? 'profit' : 'loss'));
+                setEl('today-roi', 'textContent', ((todayPnl / (balance || 10000)) * 100).toFixed(1) + '% ROI');
+                
+                // Week/Month stats from analytics
+                if (data.analytics) {
+                    const month = data.analytics.monthly || {};
+                    setEl('month-pnl', 'textContent', formatPnL(month.total_pnl || 0));
+                    setEl('month-trades', 'textContent', (month.total_trades || 0) + ' trades');
+                    
+                    const allTime = data.analytics.all_time || {};
+                    setEl('all-time-pnl', 'textContent', formatPnL(allTime.total_pnl || 0));
+                    setEl('all-time-trades', 'textContent', (allTime.total_trades || 0) + ' total trades');
+                    setEl('all-time-wr', 'textContent', (allTime.win_rate || 0).toFixed(1) + '%');
+                    setEl('wr-bar', 'style.width', (allTime.win_rate || 0) + '%');
+                    setEl('profit-factor', 'textContent', (allTime.profit_factor || 0).toFixed(2));
+                }
+                
+                // Trades stats
+                const wins = trades.filter(t => t.pnl > 0).length;
+                const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : 0;
+                setEl('win-rate', 'textContent', winRate + '%');
+                setEl('trades-count', 'textContent', trades.length);
+                setEl('account-trades', 'textContent', trades.length);
+                setEl('today-trade-count', 'textContent', trades.length);
+                
+                // Positions stats
+                setEl('watchlist-count', 'textContent', watchlist.length);
+                setEl('pos-count', 'textContent', openPositions.length);
+                setEl('open-positions-count', 'textContent', openPositions.length);
+                setEl('account-positions', 'textContent', openPositions.length);
+                setEl('total-positions-pnl', 'textContent', formatPnL(totalPnl) + ' P&L');
+                setEl('total-positions-pnl', 'style.color', totalPnl >= 0 ? '#00ff88' : '#ff4757');
+            } catch (e) {
+                console.warn('Dashboard update error (non-critical):', e);
+            }
             
+            // ALWAYS update the tables regardless of any errors above
             updatePositions(positions);
             updateWatchlist(watchlist);
             updateTrades(trades);
