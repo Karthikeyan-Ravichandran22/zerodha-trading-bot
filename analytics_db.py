@@ -38,7 +38,7 @@ class AnalyticsDatabase:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Trades table
+        # Trades table - enhanced with all trade details
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS trades (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,9 +54,46 @@ class AnalyticsDatabase:
                 status TEXT DEFAULT 'OPEN',
                 strategy TEXT DEFAULT 'Gold 93% Win Rate',
                 trail_percent REAL,
+                stop_loss REAL,
+                target REAL,
+                trail_sl REAL,
+                exit_time TEXT,
+                product_type TEXT DEFAULT 'MIS',
+                exit_reason TEXT,
+                entry_time TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Add new columns if they don't exist (migration for existing DB)
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN stop_loss REAL')
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN target REAL')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN trail_sl REAL')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN exit_time TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN product_type TEXT DEFAULT "MIS"')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN exit_reason TEXT')
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute('ALTER TABLE trades ADD COLUMN entry_time TEXT')
+        except sqlite3.OperationalError:
+            pass
         
         # Daily summary table
         cursor.execute('''
@@ -98,6 +135,30 @@ class AnalyticsDatabase:
                 min_win_rate REAL DEFAULT 80,
                 expected_pnl REAL DEFAULT 0,
                 stocks_list TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Positions table - track all positions with full history
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS positions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                segment TEXT DEFAULT 'EQUITY',
+                signal TEXT NOT NULL,
+                entry_price REAL NOT NULL,
+                entry_time TEXT,
+                quantity INTEGER NOT NULL,
+                stop_loss REAL,
+                target REAL,
+                trail_sl REAL,
+                exit_price REAL,
+                exit_time TEXT,
+                exit_reason TEXT,
+                product_type TEXT DEFAULT 'MIS',
+                pnl REAL DEFAULT 0,
+                status TEXT DEFAULT 'OPEN',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -408,7 +469,155 @@ class AnalyticsDatabase:
         
         conn.close()
         return data
+    
+    def save_position(self, symbol, signal, entry_price, quantity, 
+                      stop_loss=0, target=0, trail_sl=0, entry_time=None,
+                      segment='EQUITY', product_type='MIS'):
+        """Save a new position to database"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        now = datetime.now(IST)
+        date_str = now.strftime('%Y-%m-%d')
+        time_str = entry_time or now.strftime('%H:%M:%S')
+        
+        cursor.execute('''
+            INSERT INTO positions 
+            (date, symbol, segment, signal, entry_price, entry_time, quantity,
+             stop_loss, target, trail_sl, product_type, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+        ''', (date_str, symbol, segment, signal, entry_price, time_str, quantity,
+              stop_loss, target, trail_sl, product_type))
+        
+        position_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return position_id
+    
+    def close_position(self, symbol, exit_price, pnl, exit_reason='MARKET_CLOSE', 
+                       exit_time=None, date=None):
+        """Close a position with exit details"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        now = datetime.now(IST)
+        date_str = date or now.strftime('%Y-%m-%d')
+        time_str = exit_time or now.strftime('%H:%M:%S')
+        
+        cursor.execute('''
+            UPDATE positions 
+            SET exit_price = ?, exit_time = ?, exit_reason = ?, pnl = ?, status = 'CLOSED'
+            WHERE symbol = ? AND date = ? AND status = 'OPEN'
+        ''', (exit_price, time_str, exit_reason, pnl, symbol, date_str))
+        
+        conn.commit()
+        conn.close()
+        
+        # Update daily summary
+        self._update_daily_summary()
+    
+    def update_position_trail(self, symbol, trail_sl, date=None):
+        """Update trailing stop loss for a position"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        date_str = date or datetime.now(IST).strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            UPDATE positions SET trail_sl = ?
+            WHERE symbol = ? AND date = ? AND status = 'OPEN'
+        ''', (trail_sl, symbol, date_str))
+        
+        conn.commit()
+        conn.close()
+    
+    def update_position_product_type(self, symbol, product_type, date=None):
+        """Update product type (MIS -> CNC conversion)"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        date_str = date or datetime.now(IST).strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            UPDATE positions SET product_type = ?
+            WHERE symbol = ? AND date = ? AND status = 'OPEN'
+        ''', (product_type, symbol, date_str))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_positions_by_date(self, date=None):
+        """Get all positions for a specific date"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        date_str = date or datetime.now(IST).strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            SELECT * FROM positions WHERE date = ? ORDER BY entry_time DESC
+        ''', (date_str,))
+        
+        columns = [description[0] for description in cursor.description]
+        positions = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        conn.close()
+        return positions
+    
+    def get_open_positions(self, date=None):
+        """Get all open positions for a date"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        date_str = date or datetime.now(IST).strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            SELECT * FROM positions WHERE date = ? AND status = 'OPEN' ORDER BY entry_time DESC
+        ''', (date_str,))
+        
+        columns = [description[0] for description in cursor.description]
+        positions = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        conn.close()
+        return positions
+    
+    def get_trading_dates(self, limit=30):
+        """Get list of dates with trading activity"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT DISTINCT date, COUNT(*) as trade_count, SUM(pnl) as total_pnl
+            FROM positions
+            GROUP BY date
+            ORDER BY date DESC
+            LIMIT ?
+        ''', (limit,))
+        
+        columns = ['date', 'trade_count', 'total_pnl']
+        dates = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        conn.close()
+        return dates
+    
+    def get_trades_by_date(self, date=None):
+        """Get all trades (from trades table) for a specific date"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        date_str = date or datetime.now(IST).strftime('%Y-%m-%d')
+        
+        cursor.execute('''
+            SELECT * FROM trades WHERE date = ? ORDER BY time DESC
+        ''', (date_str,))
+        
+        columns = [description[0] for description in cursor.description]
+        trades = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        conn.close()
+        return trades
 
 
 # Singleton instance
 analytics_db = AnalyticsDatabase()
+

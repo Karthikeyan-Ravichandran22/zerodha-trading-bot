@@ -71,6 +71,7 @@ from utils.notifications import send_trade_alert, send_exit_alert, send_daily_su
 from utils.position_manager import position_manager
 from utils.trade_journal import trade_journal
 from utils.capital_manager import capital_manager
+from analytics_db import analytics_db  # Database for persistent trade history
 
 # Dashboard removed - using new dashboard.py instead
 
@@ -738,6 +739,24 @@ class CloudTradingBot:
         # Save positions to file for dashboard
         self._save_positions_to_file(signal)
         
+        # Save to database for persistent history
+        try:
+            analytics_db.save_position(
+                symbol=signal.symbol,
+                signal=signal.signal.value,
+                entry_price=signal.entry_price,
+                quantity=signal.quantity,
+                stop_loss=signal.stop_loss,
+                target=signal.target,
+                trail_sl=signal.stop_loss,  # Initial trail = SL
+                entry_time=datetime.now(IST).strftime("%H:%M:%S"),
+                segment='EQUITY',
+                product_type='MIS'
+            )
+            logger.debug(f"💾 Position saved to database: {signal.symbol}")
+        except Exception as db_err:
+            logger.warning(f"Database save error: {db_err}")
+        
         # Add estimated charges
         self.today_charges += charges['total_charges']
         
@@ -1016,6 +1035,20 @@ class CloudTradingBot:
                         'entry_time': entry_time,
                         'exit_reason': exit_reason
                     }
+                    
+                    # Save closed position to database for history
+                    if net_qty == 0 and exit_price > 0:
+                        try:
+                            analytics_db.close_position(
+                                symbol=symbol,
+                                exit_price=exit_price,
+                                pnl=realised,
+                                exit_reason=exit_reason,
+                                exit_time=datetime.now(IST).strftime("%H:%M:%S")
+                            )
+                        except Exception as db_err:
+                            logger.debug(f"DB close position error: {db_err}")
+                    
                 except Exception as pe:
                     logger.debug(f"Error parsing position: {pe}")
                     continue
@@ -1258,6 +1291,12 @@ NET P&L: ₹{net_pnl:+,.2f}
                         if convert_response and convert_response.get('status'):
                             converted_count += 1
                             logger.info(f"✅ {symbol}: Successfully converted to CNC!")
+                            
+                            # Update database with new product type
+                            try:
+                                analytics_db.update_position_product_type(symbol, 'CNC')
+                            except:
+                                pass
                             
                             # Send Telegram notification
                             try:

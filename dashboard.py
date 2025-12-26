@@ -1459,6 +1459,28 @@ def api_health():
     })
 
 
+@app.route('/api/trading-dates')
+def api_trading_dates():
+    """Get list of dates with trading activity"""
+    try:
+        from analytics_db import analytics_db
+        dates = analytics_db.get_trading_dates(limit=30)
+        return jsonify({'dates': dates})
+    except Exception as e:
+        return jsonify({'dates': [], 'error': str(e)})
+
+
+@app.route('/api/positions/<date>')
+def api_positions_by_date(date):
+    """Get all positions for a specific date"""
+    try:
+        from analytics_db import analytics_db
+        positions = analytics_db.get_positions_by_date(date)
+        return jsonify({'positions': positions, 'date': date})
+    except Exception as e:
+        return jsonify({'positions': [], 'date': date, 'error': str(e)})
+
+
 def run_dashboard(port=5050):
     logger.info(f"🌐 Premium Dashboard starting on http://localhost:{port}")
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
