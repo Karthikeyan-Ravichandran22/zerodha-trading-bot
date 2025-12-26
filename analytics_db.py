@@ -452,17 +452,30 @@ class AnalyticsDatabase:
         
         conn.close()
         
+        # Calculate profit factor - avoid Infinity which breaks JSON
+        if avg_loss and avg_loss != 0:
+            profit_factor = abs(avg_win / avg_loss)
+        elif avg_win and avg_win > 0:
+            profit_factor = 999.0  # Placeholder for "all wins, no losses"
+        else:
+            profit_factor = 0.0
+        
+        # Ensure no Infinity or NaN values
+        import math
+        if math.isinf(profit_factor) or math.isnan(profit_factor):
+            profit_factor = 999.0
+        
         return {
             'total_trades': total,
             'winning_trades': wins,
             'losing_trades': losses,
             'total_pnl': total_pnl,
             'win_rate': (wins / total * 100) if total > 0 else 0,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
+            'avg_win': avg_win if avg_win else 0,
+            'avg_loss': avg_loss if avg_loss else 0,
             'best_trade': best_trade,
             'worst_trade': worst_trade,
-            'profit_factor': abs(avg_win / avg_loss) if avg_loss != 0 else 0
+            'profit_factor': profit_factor
         }
     
     def get_top_stocks(self, limit=5):
