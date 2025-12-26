@@ -37,7 +37,9 @@ def activity_log_handler(message):
     
     # Only save important logs (not HTTP requests)
     if any(x in msg for x in ['Scanning', 'SIGNAL', 'Indicators', 'Candle', 'Skipping', 'ORDER', 'Error', '🔍', '🎯', '⚠️', '✅', '❌']):
-        log_entry = f"{record['time'].strftime('%H:%M:%S')} | {msg}"
+        # Convert to IST for display
+        ist_time = datetime.now(IST).strftime('%H:%M:%S')
+        log_entry = f"{ist_time} | {msg}"
         activity_logs.append(log_entry)
         
         # Keep only last N logs
