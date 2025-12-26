@@ -486,7 +486,7 @@ DASHBOARD_HTML = """
             <div class="stat-card green live-pulse">
                 <div class="stat-icon green"><i class="fas fa-chart-line"></i></div>
                 <div class="stat-label"><span class="live-dot"></span>Open Positions</div>
-                <div class="stat-value" id="capital">0</div>
+                <div class="stat-value" id="open-positions-count">0</div>
                 <div class="stat-sub" id="broker-user"><i class="fas fa-exchange-alt"></i> <span id="total-positions-pnl">₹0 P&L</span></div>
             </div>
             <div class="stat-card green live-pulse">
@@ -761,7 +761,7 @@ DASHBOARD_HTML = """
             const userName = broker.user_name || 'Not Connected';
             const isConnected = broker.is_authenticated || false;
             
-            document.getElementById('capital').textContent = formatCurrency(balance);
+            // Update open positions count (set later after filtering positions)
             document.getElementById('broker-user').innerHTML = isConnected 
                 ? '<i class="fas fa-check-circle" style="color:#00ff88"></i> ' + userName
                 : '<i class="fas fa-times-circle" style="color:#ff4757"></i> ' + userName;
@@ -810,8 +810,8 @@ DASHBOARD_HTML = """
             
             document.getElementById('watchlist-count').textContent = watchlist.length;
             document.getElementById('pos-count').textContent = openPositions.length;
+            document.getElementById('open-positions-count').textContent = openPositions.length;
             document.getElementById('account-positions').textContent = openPositions.length;
-            document.getElementById('capital').textContent = openPositions.length;
             document.getElementById('total-positions-pnl').textContent = formatPnL(totalPnl) + ' P&L';
             document.getElementById('total-positions-pnl').style.color = totalPnl >= 0 ? '#00ff88' : '#ff4757';
             
