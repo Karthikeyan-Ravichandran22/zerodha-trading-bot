@@ -960,12 +960,24 @@ class CloudTradingBot:
                         trail_sl = sl_price  # No trailing until price moves in favor
                         entry_time = ''
                     
+                    # Determine exit reason for closed positions
+                    ltp = float(pos.get('ltp', 0) or 0)
+                    exit_reason = ''
+                    if net_qty == 0 and entry_price > 0:  # Position is closed
+                        if target_price > 0 and ltp >= target_price:
+                            exit_reason = 'TARGET_HIT'
+                        elif sl_price > 0 and ltp <= sl_price:
+                            exit_reason = 'SL_HIT'
+                        else:
+                            # Neither target nor SL hit - must be market close or manual exit
+                            exit_reason = 'MARKET_CLOSE'
+                    
                     positions[symbol] = {
                         'symbol': symbol,
                         'signal': 'BUY' if net_qty > 0 else 'SELL' if net_qty < 0 else 'CLOSED',
                         'qty': abs(net_qty),
                         'entry_price': entry_price,
-                        'ltp': float(pos.get('ltp', 0) or 0),
+                        'ltp': ltp,
                         'pnl': pnl,
                         'realised_pnl': realised,
                         'unrealised_pnl': unrealised,
@@ -978,7 +990,8 @@ class CloudTradingBot:
                         'sl_price': sl_price,
                         'target_price': target_price,
                         'trail_sl': trail_sl,
-                        'entry_time': entry_time
+                        'entry_time': entry_time,
+                        'exit_reason': exit_reason
                     }
                 except Exception as pe:
                     logger.debug(f"Error parsing position: {pe}")

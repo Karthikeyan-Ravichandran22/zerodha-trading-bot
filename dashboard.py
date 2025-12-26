@@ -909,9 +909,19 @@ DASHBOARD_HTML = """
             // Styling for closed positions
             const cardOpacity = isClosed ? '0.7' : '1';
             const cardBorder = isClosed ? '1px solid rgba(136,136,136,0.3)' : '1px solid var(--border)';
-            const statusBadge = isClosed ? 
-                '<span style="background: rgba(136,136,136,0.2); color: #888; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.55rem; margin-left: 0.5rem;">✓ CLOSED</span>' : 
-                '<span class="live-dot"></span>';
+            
+            // Exit reason badge for closed positions
+            let statusBadge = '<span class="live-dot"></span>';
+            if (isClosed) {
+                const exitReason = pos.exit_reason || 'MARKET_CLOSE';
+                if (exitReason === 'TARGET_HIT') {
+                    statusBadge = '<span style="background: rgba(0,255,136,0.2); color: #00ff88; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.6rem; font-weight: 600;">🎯 TARGET HIT</span>';
+                } else if (exitReason === 'SL_HIT') {
+                    statusBadge = '<span style="background: rgba(255,71,87,0.2); color: #ff4757; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.6rem; font-weight: 600;">⛔ SL HIT</span>';
+                } else {
+                    statusBadge = '<span style="background: rgba(52,152,219,0.2); color: #3498db; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.6rem; font-weight: 600;">⏰ MARKET CLOSE</span>';
+                }
+            }
             
             return `
             <div class="position-card ${isClosed ? '' : 'live-pulse'}" style="background: rgba(255,255,255,0.03); border: ${cardBorder}; border-radius: 12px; padding: 1rem; margin-bottom: 0.75rem; opacity: ${cardOpacity};">
