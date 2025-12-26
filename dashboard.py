@@ -500,17 +500,54 @@ DASHBOARD_HTML = """
                 <div class="stat-label">Watchlist</div>
                 <div class="stat-value" id="watchlist-count">0</div>
                 <div class="stat-sub">80%+ Win Rate Only</div>
+            </div>
         </div>
         
-        <!-- ROW 1: P&L Chart + Risk Meter (TOP) -->
+        <!-- ROW 1: LIVE ACTIVITY LOG (Full Width, Large) -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-terminal"></i> 🔴 LIVE ACTIVITY LOG</h2>
+                <span id="log-status" style="font-size: 0.75rem; color: #00ff88;"><i class="fas fa-circle fa-xs"></i> Live - Auto-Refreshing</span>
+            </div>
+            <div id="activity-log" style="height: 280px; overflow-y: auto; font-family: 'Monaco', 'Consolas', monospace; font-size: 0.8rem; padding: 1rem; background: #0a0a0f; border-radius: 10px; border: 1px solid #252535;">
+                <div class="log-entry" style="color: #888;">⏳ Waiting for bot activity...</div>
+            </div>
+        </div>
+        
+        <!-- ROW 2: Account Details + Risk Meter -->
         <div class="grid-2 animate">
-            <!-- P&L Chart -->
+            <!-- Account Details -->
             <div class="section">
                 <div class="section-header">
-                    <h2 class="section-title"><i class="fas fa-chart-area"></i> Daily P&L Chart</h2>
+                    <h2 class="section-title"><i class="fas fa-wallet"></i> Broker Account Details</h2>
+                    <span id="broker-connection" style="font-size: 0.7rem; color: #00ff88;"><i class="fas fa-check-circle"></i> Connected</span>
                 </div>
-                <div class="chart-container" style="height: 220px;">
-                    <canvas id="pnlChart"></canvas>
+                <div style="padding: 1rem;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div style="background: linear-gradient(135deg, rgba(0, 212, 170, 0.1) 0%, rgba(102, 126, 234, 0.1) 100%); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border);">
+                            <div style="font-size: 0.75rem; color: #888; margin-bottom: 0.5rem;">💰 Available Balance</div>
+                            <div id="account-balance" style="font-size: 2rem; font-weight: 800; color: var(--accent);">₹0</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(0, 212, 170, 0.1) 100%); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border);">
+                            <div style="font-size: 0.75rem; color: #888; margin-bottom: 0.5rem;">👤 Account Holder</div>
+                            <div id="account-name" style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary);">Connecting...</div>
+                            <div id="account-broker" style="font-size: 0.75rem; color: var(--accent); margin-top: 0.25rem;">Angel One</div>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-top: 1rem;">
+                        <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 0.65rem; color: #888;">🔴 Open Positions</div>
+                            <div id="account-positions" style="font-size: 1.3rem; font-weight: 700;">0</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 0.65rem; color: #888;">📊 Today's Trades</div>
+                            <div id="account-trades" style="font-size: 1.3rem; font-weight: 700;">0</div>
+                        </div>
+                        <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
+                            <div style="font-size: 0.65rem; color: #888;">⏰ Last Updated</div>
+                            <div id="account-updated" style="font-size: 0.9rem; font-weight: 600; color: #888;">--:--</div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -520,7 +557,7 @@ DASHBOARD_HTML = """
                     <h2 class="section-title"><i class="fas fa-tachometer-alt"></i> Risk Meter</h2>
                 </div>
                 <div style="text-align: center; padding: 0.5rem;">
-                    <div id="risk-gauge" style="position: relative; width: 180px; height: 100px; margin: 0 auto;">
+                    <div id="risk-gauge" style="position: relative; width: 200px; height: 110px; margin: 0 auto;">
                         <svg viewBox="0 0 200 120" style="width: 100%;">
                             <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#333" stroke-width="15"/>
                             <path id="risk-arc" d="M 20 100 A 80 80 0 0 1 100 20" fill="none" stroke="url(#riskGradient)" stroke-width="15" stroke-linecap="round"/>
@@ -533,48 +570,37 @@ DASHBOARD_HTML = """
                             </defs>
                         </svg>
                         <div style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); text-align: center;">
-                            <div id="risk-value" style="font-size: 1.5rem; font-weight: 800; color: #00ff88;">LOW</div>
-                            <div id="risk-percent" style="font-size: 0.7rem; color: #888;">0% Exposure</div>
+                            <div id="risk-value" style="font-size: 1.8rem; font-weight: 800; color: #00ff88;">LOW</div>
+                            <div id="risk-percent" style="font-size: 0.8rem; color: #888;">0% Exposure</div>
                         </div>
                     </div>
-                    <div style="display: flex; justify-content: space-around; margin-top: 0.5rem; font-size: 0.7rem;">
-                        <div><span style="color: #00ff88;">●</span> Low</div>
-                        <div><span style="color: #ffa502;">●</span> Medium</div>
-                        <div><span style="color: #ff4757;">●</span> High</div>
+                    <div style="display: flex; justify-content: space-around; margin-top: 0.75rem; font-size: 0.75rem;">
+                        <div><span style="color: #00ff88;">●</span> Low (0-30%)</div>
+                        <div><span style="color: #ffa502;">●</span> Medium (30-60%)</div>
+                        <div><span style="color: #ff4757;">●</span> High (60%+)</div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.75rem;">
-                        <div style="background: var(--bg-card); padding: 0.5rem; border-radius: 8px;">
-                            <div style="color: #888;">Open Pos</div>
-                            <div id="risk-positions" style="font-weight: 700; font-size: 1.2rem;">0</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem;">
+                        <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border);">
+                            <div style="color: #888; font-size: 0.7rem;">Open Positions</div>
+                            <div id="risk-positions" style="font-weight: 700; font-size: 1.4rem;">0</div>
                         </div>
-                        <div style="background: var(--bg-card); padding: 0.5rem; border-radius: 8px;">
-                            <div style="color: #888;">At Risk</div>
-                            <div id="risk-capital" style="font-weight: 700; color: #00ff88; font-size: 1.2rem;">₹0</div>
+                        <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border);">
+                            <div style="color: #888; font-size: 0.7rem;">Capital At Risk</div>
+                            <div id="risk-capital" style="font-weight: 700; color: #00ff88; font-size: 1.4rem;">₹0</div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- ROW 2: Live Activity Log + Open Positions + Today's Trades -->
+        <!-- ROW 3: Open Positions + Today's Trades + P&L Chart -->
         <div class="grid-3 animate">
-            <!-- Live Activity Log -->
-            <div class="section">
-                <div class="section-header">
-                    <h2 class="section-title"><i class="fas fa-terminal"></i> Live Activity Log</h2>
-                    <span id="log-status" style="font-size: 0.65rem; color: #00ff88;"><i class="fas fa-circle fa-xs"></i> Live</span>
-                </div>
-                <div id="activity-log" style="height: 200px; overflow-y: auto; font-family: 'Monaco', 'Consolas', monospace; font-size: 0.7rem; padding: 0.5rem; background: #0a0a0f; border-radius: 8px;">
-                    <div class="log-entry" style="color: #888;">Waiting for activity...</div>
-                </div>
-            </div>
-            
             <!-- Open Positions -->
             <div class="section">
                 <div class="section-header">
                     <h2 class="section-title"><i class="fas fa-chart-line"></i> Open Positions <span class="badge" id="pos-count">0</span></h2>
                 </div>
-                <div id="positions-container" style="max-height: 200px; overflow-y: auto;">
+                <div id="positions-container" style="max-height: 220px; overflow-y: auto;">
                     <div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>
                 </div>
             </div>
@@ -584,13 +610,23 @@ DASHBOARD_HTML = """
                 <div class="section-header">
                     <h2 class="section-title"><i class="fas fa-history"></i> Today's Trades <span class="badge" id="trades-count">0</span></h2>
                 </div>
-                <div id="trades-container" style="max-height: 200px; overflow-y: auto;">
+                <div id="trades-container" style="max-height: 220px; overflow-y: auto;">
                     <div class="empty-state"><i class="fas fa-calendar-day"></i><p>No trades today</p></div>
+                </div>
+            </div>
+            
+            <!-- P&L Chart -->
+            <div class="section">
+                <div class="section-header">
+                    <h2 class="section-title"><i class="fas fa-chart-area"></i> Weekly P&L Chart</h2>
+                </div>
+                <div class="chart-container" style="height: 220px;">
+                    <canvas id="pnlChart"></canvas>
                 </div>
             </div>
         </div>
         
-        <!-- ROW 3: Live Stock Prices -->
+        <!-- ROW 4: Live Stock Prices -->
         <div class="section animate" style="margin-bottom: 1.5rem;">
             <div class="section-header">
                 <h2 class="section-title"><i class="fas fa-bolt"></i> Live Stock Prices</h2>
@@ -712,6 +748,16 @@ DASHBOARD_HTML = """
                 ? '<i class="fas fa-check-circle" style="color:#00ff88"></i> ' + userName
                 : '<i class="fas fa-times-circle" style="color:#ff4757"></i> ' + userName;
             
+            // Update Account Details Section
+            document.getElementById('account-balance').textContent = formatCurrency(balance);
+            document.getElementById('account-name').textContent = userName;
+            document.getElementById('account-broker').textContent = broker.broker_name || 'Angel One';
+            document.getElementById('broker-connection').innerHTML = isConnected 
+                ? '<i class="fas fa-check-circle"></i> Connected'
+                : '<i class="fas fa-times-circle" style="color:#ff4757"></i> Disconnected';
+            document.getElementById('broker-connection').style.color = isConnected ? '#00ff88' : '#ff4757';
+            document.getElementById('account-updated').textContent = broker.last_updated || '--:--';
+            
             const todayPnl = data.daily_pnl || 0;
             document.getElementById('today-pnl').textContent = formatPnL(todayPnl);
             document.getElementById('today-pnl').className = 'stat-value ' + (todayPnl >= 0 ? 'profit' : 'loss');
@@ -740,12 +786,13 @@ DASHBOARD_HTML = """
             const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : 0;
             document.getElementById('win-rate').textContent = winRate + '%';
             document.getElementById('trades-count').textContent = trades.length;
+            document.getElementById('account-trades').textContent = trades.length;
             
             const watchlist = data.watchlist || [];
-            document.getElementById('watchlist-count').textContent = watchlist.length;
-            
             const positions = data.positions || {};
+            document.getElementById('watchlist-count').textContent = watchlist.length;
             document.getElementById('pos-count').textContent = Object.keys(positions).length;
+            document.getElementById('account-positions').textContent = Object.keys(positions).length;
             
             updatePositions(positions);
             updateWatchlist(watchlist);
@@ -1047,6 +1094,15 @@ def get_dashboard_data():
             'all_time': analytics_db.get_all_time_stats(),
             'top_stocks': analytics_db.get_top_stocks()
         }
+        # Get P&L history for chart
+        try:
+            daily_chart = analytics_db.get_daily_pnl_chart()
+            if daily_chart:
+                data['pnl_history'] = [d.get('pnl', 0) for d in daily_chart[-5:]]  # Last 5 days
+            else:
+                data['pnl_history'] = [0, 0, 0, 0, 0]
+        except:
+            data['pnl_history'] = [0, 0, 0, 0, 0]
     except Exception as e:
         logger.warning(f"Analytics not available: {e}")
         data['analytics'] = {
@@ -1055,6 +1111,7 @@ def get_dashboard_data():
             'all_time': {'total_trades': 0, 'total_pnl': 0, 'win_rate': 0, 'profit_factor': 0},
             'top_stocks': []
         }
+        data['pnl_history'] = [0, 0, 0, 0, 0]
     
     # Load broker (Angel One) balance
     try:
