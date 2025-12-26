@@ -1,5 +1,10 @@
 # 🤖 Automated Trading Bot
 
+## 📌 Current Version: `v1.0-stable`
+> Created: December 26, 2025 | Tag: `v1.0-stable`
+
+---
+
 ## ⚠️ IMPORTANT DISCLAIMER
 - Trading in stock market involves **substantial risk of loss**
 - This bot is for **educational purposes only**
@@ -16,6 +21,83 @@
 | 📊 **Live Dashboard** | [https://worker-production-65d3.up.railway.app](https://worker-production-65d3.up.railway.app) |
 | ⚙️ **Railway Dashboard** | [https://railway.app/dashboard](https://railway.app/dashboard) |
 | 📱 **Telegram Bot** | [@karthikeyantrades_bot](https://t.me/karthikeyantrades_bot) |
+| 🏷️ **Stable Version Tag** | `v1.0-stable` |
+
+---
+
+## 🎯 v1.0-stable Features (Production Ready!)
+
+### ✅ Premium Web Dashboard
+- **Real-time Clock** - IST timezone display with live updating
+- **Live Stats Cards** - Open positions count, today's trades, P&L
+- **Broker Info** - Angel One account name and balance
+- **Activity Log** - Live scrolling activity feed
+
+### ✅ Position Cards with Full Details
+| Field | Description |
+|-------|-------------|
+| **Entry Price** | Actual buy/entry price with entry time |
+| **Stop Loss** | Auto-calculated 1.5% below entry (for BUY) |
+| **Target** | Auto-calculated 3% above entry (for BUY) |
+| **Trail SL** | Trailing stop loss that moves with profit |
+| **Exit Price** | **Actual sell average price** (from Angel One API) |
+
+### ✅ Exit Reason Display
+| Badge | Meaning |
+|-------|---------|
+| 🎯 **TARGET HIT** | Position closed at target price |
+| ⛔ **SL HIT** | Position closed at stop loss |
+| ⏰ **MARKET CLOSE** | Position squared off at market close |
+
+### ✅ Segment Tags
+| Tag | Color | Meaning |
+|-----|-------|---------|
+| **EQUITY** | Green | Regular stock trading |
+| **OPTIONS** | Purple | Options trading (CE/PE) |
+| **COMMODITY** | Orange | MCX commodity trading |
+| **FUTURES** | Blue | Futures trading |
+
+### ✅ Accurate P&L Calculation
+- Uses **actual sell price** (`sellavgprice`) from Angel One API
+- NOT the LTP (Last Traded Price) which shows current market price
+- Matches exactly with Angel One mobile app
+
+---
+
+## 🔄 Version Control & Rollback
+
+### Git Tag System
+This project uses Git tags for version control. Tags are permanent bookmarks to specific commits.
+
+### Current Tags
+```bash
+git tag          # List all tags
+# Output: v1.0-stable
+```
+
+### How to Rollback
+If something breaks after an update:
+```bash
+# Switch to stable version
+git checkout v1.0-stable
+
+# Force deploy the stable version
+git checkout -b temp-stable
+git push origin main --force
+```
+
+### View Tag Details
+```bash
+git show v1.0-stable
+```
+Shows: creator, date, description, and code changes included.
+
+### Creating New Version Tags
+After making improvements:
+```bash
+git tag -a v1.1-stable -m "Added feature XYZ"
+git push origin v1.1-stable
+```
 
 ---
 
@@ -28,7 +110,7 @@
 
 ---
 
-## 📈 STOCK TRADING PIPELINE (NEW!)
+## 📈 STOCK TRADING PIPELINE
 
 ### Smart Stock Selection
 - **Automatic Stock Scanner** - Scans 40+ quality stocks
@@ -120,7 +202,97 @@ python main.py --scan-now            # Scan and start
 
 ---
 
-## 🌅 DAILY MORNING ROUTINE (Do This Every Trading Day!)
+## 🏗️ PROJECT ARCHITECTURE
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `cloud_bot.py` | Main trading bot with Angel One integration |
+| `dashboard.py` | Premium web dashboard (Flask) |
+| `smart_stock_selector.py` | Automatic stock screening |
+| `manage_watchlist.py` | Watchlist management |
+| `main.py` | Entry point for local trading |
+
+### Backend Data Flow (cloud_bot.py)
+```
+1. _fetch_angel_positions()  → Fetches positions from Angel One API
+2. _fetch_angel_trades()     → Fetches executed trades
+3. _update_dashboard_files() → Saves JSON files for dashboard
+4. refresh_balance()         → Updates broker balance
+```
+
+### Dashboard Data Flow (dashboard.py)
+```
+1. /api/dashboard        → Returns JSON with all dashboard data
+2. updateDashboard()     → JavaScript function that fetches data
+3. renderPositionCard()  → Renders each position with details
+4. Auto-refresh          → Every 30 seconds
+```
+
+### Position Data Structure
+```json
+{
+  "SYMBOL": {
+    "symbol": "BPCL",
+    "entry_price": 364.75,
+    "ltp": 366.00,
+    "exit_price": 365.70,      // Actual sell price (NEW in v1.0)
+    "sl_price": 359.28,        // Auto-calculated 1.5%
+    "target_price": 375.69,    // Auto-calculated 3%
+    "trail_sl": 359.28,
+    "pnl": 51.0,
+    "realised_pnl": 51.0,
+    "segment": "EQUITY",
+    "exit_reason": "MARKET_CLOSE"  // TARGET_HIT, SL_HIT, or MARKET_CLOSE
+  }
+}
+```
+
+---
+
+## 📊 Bot Schedule
+
+| Time | Action |
+|------|--------|
+| 9:00 AM | Login to Zerodha, add token |
+| 9:15 AM | Market opens |
+| 9:45 AM | **Bot starts scanning** (avoids opening volatility) |
+| 9:45 AM - 2:15 PM | Active trading + Telegram alerts |
+| 2:15 PM | Trading stops (avoids closing volatility) |
+| 3:30 PM | Daily summary on Telegram |
+| **Sunday 6 PM** | **Weekly stock optimization** |
+
+---
+
+## 📌 Current Watchlist (Auto-optimized)
+```
+PNB, SAIL, IDEA, IRFC, PFC, BPCL, BHEL
+```
+*Updated automatically every Sunday based on performance*
+
+---
+
+## 📈 Expected Results
+
+| Metric | Value |
+|--------|-------|
+| Signals/Day | 3-8 |
+| Win Rate | 50-55% |
+| Net Profit/Day | ₹50-200 (after brokerage) |
+| Monthly Profit | ₹1,000-4,000 |
+
+---
+
+## 📱 Telegram Alerts
+You'll receive alerts for:
+- 🟢 Trade signals (BUY/SELL)
+- 💚💔 Trade exits (profit/loss)
+- 📊 Daily summary
+
+---
+
+## 🌅 DAILY MORNING ROUTINE (Zerodha Users)
 
 ### ⏰ Before 9:15 AM (Market Open):
 
@@ -159,50 +331,13 @@ http://127.0.0.1:5000/callback?request_token=XXXXXXXX&action=login&status=succes
 
 ---
 
-## 📊 Bot Schedule:
-| Time | Action |
-|------|--------|
-| 9:00 AM | Login to Zerodha, add token |
-| 9:15 AM | Market opens |
-| 9:45 AM | **Bot starts scanning** (avoids opening volatility) |
-| 9:45 AM - 2:15 PM | Active trading + Telegram alerts |
-| 2:15 PM | Trading stops (avoids closing volatility) |
-| 3:30 PM | Daily summary on Telegram |
-| **Sunday 6 PM** | **Weekly stock optimization** |
-
----
-
-## � Current Watchlist (Auto-optimized):
-```
-PNB, SAIL, IDEA, IRFC, PFC, BPCL, BHEL
-```
-*Updated automatically every Sunday based on performance*
-
----
-
-## 📈 Expected Results:
-| Metric | Value |
-|--------|-------|
-| Signals/Day | 3-8 |
-| Win Rate | 50-55% |
-| Net Profit/Day | ₹50-200 (after brokerage) |
-| Monthly Profit | ₹1,000-4,000 |
-
----
-
-## 📱 Telegram Alerts:
-You'll receive alerts for:
-- 🟢 Trade signals (BUY/SELL)
-- 💚💔 Trade exits (profit/loss)
-- 📊 Daily summary
-
----
-
 ## 🛠️ Prerequisites
 1. **Zerodha Kite Connect API** subscription (₹2,000/month)
    - Sign up at: https://kite.trade
 2. Python 3.8+
-3. Active Zerodha trading account
+3. Active trading account (Angel One or Zerodha)
+
+---
 
 ## 📁 Project Structure
 ```
@@ -213,9 +348,9 @@ zeroda_trading/
 │   ├── __init__.py
 │   ├── base_strategy.py     # Base strategy class
 │   ├── vwap_bounce.py       # VWAP Bounce strategy
-│   ├── orb_strategy.py      # Opening Range Breakout
-│   ├── ema_crossover.py     # EMA Crossover strategy
-│   └── gap_and_go.py        # Gap and Go strategy
+│   └── advanced_candle_flow.py  # Main trading strategy
+├── best_strategies/
+│   └── gold_93_winrate_strategy.py  # Gold trading strategy (93% win rate)
 ├── core/
 │   ├── __init__.py
 │   ├── zerodha_client.py    # Kite Connect wrapper
@@ -227,15 +362,20 @@ zeroda_trading/
 │   ├── indicators.py        # Technical indicators
 │   ├── logger.py            # Logging utility
 │   └── notifications.py     # Telegram/Email alerts
-├── backtest/
-│   ├── __init__.py
-│   └── backtester.py        # Strategy backtesting
-├── logs/                    # Trade logs
+├── data/
+│   ├── today_trades.json    # Today's trades (for dashboard)
+│   ├── stock_positions.json # Current positions (for dashboard)
+│   └── zerodha_status.json  # Broker connection status
+├── cloud_bot.py             # Main cloud trading bot (Railway)
+├── dashboard.py             # Premium web dashboard
+├── smart_stock_selector.py  # Automatic stock screening
+├── manage_watchlist.py      # Watchlist management
 ├── main.py                  # Main entry point
-├── paper_trade.py           # Paper trading mode
 ├── requirements.txt         # Dependencies
-└── .env.example             # Environment variables template
+└── README.md                # This file
 ```
+
+---
 
 ## 🚀 Quick Start
 
@@ -248,7 +388,7 @@ pip install -r requirements.txt
 ### 2. Configure API Keys
 ```bash
 cp .env.example .env
-# Edit .env with your Zerodha API credentials
+# Edit .env with your API credentials
 ```
 
 ### 3. Run Paper Trading First (RECOMMENDED)
@@ -261,11 +401,49 @@ python paper_trade.py
 python main.py
 ```
 
-## 🎯 Implemented Strategies
-1. **Gap and Go** - Trade morning gaps with volume confirmation
-2. **VWAP Bounce** - Buy/sell at VWAP support/resistance
-3. **Opening Range Breakout** - Trade 15-min range breakouts
-4. **EMA Crossover** - 9/21 EMA crossover signals
+---
+
+## 🔧 Troubleshooting
+
+### Dashboard Not Showing Data
+1. Check Railway logs for errors
+2. Verify Angel One credentials are correct
+3. Ensure bot is running (not in sleep mode)
+
+### Exit Price Shows Wrong Value
+- Fixed in v1.0-stable
+- Now uses `sellavgprice` from Angel One API
+- Matches mobile app exactly
+
+### JavaScript Errors in Dashboard
+- Fixed in v1.0-stable
+- Template literal syntax errors resolved
+- Defensive coding with try-catch blocks
+
+---
+
+## 📚 Learning Resources
+
+### Git Commands Used in This Project
+```bash
+git tag                      # List all version tags
+git tag -a v1.0 -m "msg"    # Create annotated tag
+git push origin v1.0         # Push tag to GitHub
+git checkout v1.0            # Switch to tagged version
+git show v1.0                # View tag details
+```
+
+### API Data Fields (Angel One)
+```python
+# Position data from Angel One API:
+pos.get('buyavgprice')   # Average buy price
+pos.get('sellavgprice')  # Average sell price (EXIT PRICE)
+pos.get('ltp')           # Last traded price (current market)
+pos.get('pnl')           # Profit/Loss
+pos.get('netqty')        # Net quantity (0 = closed)
+```
+
+---
 
 ## ⚙️ Risk Management Features
 - ✅ Position sizing based on 1-2% risk per trade
@@ -275,16 +453,7 @@ python main.py
 - ✅ No trading during high volatility events
 - ✅ Real-time P&L monitoring
 
-## 📱 Notifications
-- Telegram alerts for trade signals
-- Email notifications for daily summary
-- Audio alerts for entry/exit signals
-
-## 🔒 Safety Features
-- Paper trading mode for testing
-- Manual approval mode (confirm before each trade)
-- Kill switch for emergency stop
-- Daily loss limit auto-stop
+---
 
 ## 📈 Usage Modes
 
@@ -306,15 +475,42 @@ Bot places trades automatically
 python main.py --mode auto
 ```
 
+---
+
 ## 📊 Backtesting
 Test strategies with historical data:
 ```bash
 python -m backtest.backtester --strategy vwap_bounce --days 30
 ```
 
+---
+
 ## 🆘 Support
 - Zerodha Kite Connect Docs: https://kite.trade/docs/connect/v3/
+- Angel One SmartAPI Docs: https://smartapi.angelbroking.com/docs
 - Issues: Create GitHub issue
+
+---
 
 ## 📜 License
 MIT License - Use at your own risk!
+
+---
+
+## 📝 Changelog
+
+### v1.0-stable (December 26, 2025)
+- ✅ Fixed exit price to use actual sell average price (not LTP)
+- ✅ Added exit reason badges (Target Hit, SL Hit, Market Close)
+- ✅ Auto-calculate SL (1.5%) and Target (3%) for all positions
+- ✅ Added segment tags (Equity, Options, Commodity, Futures)
+- ✅ Fixed JavaScript template literal syntax errors
+- ✅ IST timezone for all timestamps
+- ✅ Real-time position cards with Entry, SL, Target, Trail SL, Exit
+- ✅ Defensive JavaScript coding with try-catch blocks
+- ✅ Live activity log with scrolling
+- ✅ Broker balance and user name display
+
+---
+
+*Last Updated: December 26, 2025*
