@@ -845,100 +845,133 @@ DASHBOARD_HTML = """
         
         function updatePositions(positions) {
             const container = document.getElementById('positions-container');
-            const arr = Object.entries(positions).filter(([k, v]) => v.qty > 0);
+            // Show ALL positions (open and closed) - don't filter by qty
+            const arr = Object.entries(positions);
             
             if (arr.length === 0) {
-                container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No open positions</p></div>';
+                container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No positions today</p></div>';
                 return;
             }
             
+            // Separate open and closed positions
+            const openPositions = arr.filter(([k, v]) => v.qty > 0);
+            const closedPositions = arr.filter(([k, v]) => v.qty === 0);
+            
             let html = '';
-            for (const [sym, pos] of arr) {
-                const ltp = pos.ltp || pos.entry_price || 0;
-                const entryPrice = pos.entry_price || 0;
-                const pnl = pos.unrealised_pnl || pos.pnl || 0;
-                const pnlClass = pnl >= 0 ? 'profit' : 'loss';
-                const segment = pos.segment || 'EQUITY';
-                const segmentClass = 'segment-' + segment.toLowerCase();
-                
-                // SL, Target, Trail values
-                const sl = pos.sl_price || 0;
-                const target = pos.target_price || 0;
-                const trailSl = pos.trail_sl || sl;
-                const entryTime = pos.entry_time || '--:--';
-                
-                // Calculate progress to target (0-100%)
-                let progress = 0;
-                if (target > entryPrice && sl < entryPrice) {
-                    const range = target - sl;
-                    const current = ltp - sl;
-                    progress = Math.max(0, Math.min(100, (current / range) * 100));
-                }
-                
-                // Is trail SL active? (different from original SL)
-                const isTrailing = trailSl > 0 && trailSl !== sl && trailSl > sl;
-                
-                html += `
-                <div class="position-card live-pulse" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; margin-bottom: 0.75rem;">
-                    <!-- Header Row: Stock Info & P&L -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <span class="live-dot"></span>
-                            <div class="stock-avatar" style="width: 36px; height: 36px; font-size: 0.75rem;">${sym.substring(0,2)}</div>
-                            <div>
-                                <h4 style="margin: 0; font-size: 1rem; font-weight: 700;">${sym}</h4>
-                                <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.2rem;">
-                                    <span class="segment-tag ${segmentClass}" style="padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.6rem;">${segment}</span>
-                                    <span class="signal-badge ${pos.signal === 'BUY' ? 'buy' : 'sell'}" style="padding: 0.15rem 0.4rem; font-size: 0.6rem;">${pos.signal}</span>
-                                    <span style="font-size: 0.65rem; color: #888;">Qty: ${pos.qty}</span>
-                                </div>
+            
+            // Show Open Positions first
+            if (openPositions.length > 0) {
+                html += '<div style="font-size: 0.75rem; color: #00ff88; margin-bottom: 0.5rem; font-weight: 600;"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> OPEN POSITIONS (' + openPositions.length + ')</div>';
+            }
+            
+            for (const [sym, pos] of openPositions) {
+                html += renderPositionCard(sym, pos, false);
+            }
+            
+            // Show Closed Positions
+            if (closedPositions.length > 0) {
+                html += '<div style="font-size: 0.75rem; color: #888; margin: 1rem 0 0.5rem 0; font-weight: 600;"><i class="fas fa-check-circle" style="font-size: 0.5rem;"></i> CLOSED TODAY (' + closedPositions.length + ')</div>';
+            }
+            
+            for (const [sym, pos] of closedPositions) {
+                html += renderPositionCard(sym, pos, true);
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        function renderPositionCard(sym, pos, isClosed) {
+            const ltp = pos.ltp || pos.entry_price || 0;
+            const entryPrice = pos.entry_price || 0;
+            // For closed positions, show realised P&L
+            const pnl = isClosed ? (pos.realised_pnl || pos.pnl || 0) : (pos.unrealised_pnl || pos.pnl || 0);
+            const pnlClass = pnl >= 0 ? 'profit' : 'loss';
+            const segment = pos.segment || 'EQUITY';
+            const segmentClass = 'segment-' + segment.toLowerCase();
+            
+            // SL, Target, Trail values
+            const sl = pos.sl_price || 0;
+            const target = pos.target_price || 0;
+            const trailSl = pos.trail_sl || sl;
+            const entryTime = pos.entry_time || '--:--';
+            
+            // Calculate progress to target (0-100%)
+            let progress = 0;
+            if (target > entryPrice && sl < entryPrice) {
+                const range = target - sl;
+                const current = ltp - sl;
+                progress = Math.max(0, Math.min(100, (current / range) * 100));
+            }
+            
+            // Is trail SL active?
+            const isTrailing = trailSl > 0 && trailSl !== sl && trailSl > sl;
+            
+            // Styling for closed positions
+            const cardOpacity = isClosed ? '0.7' : '1';
+            const cardBorder = isClosed ? '1px solid rgba(136,136,136,0.3)' : '1px solid var(--border)';
+            const statusBadge = isClosed ? 
+                '<span style="background: rgba(136,136,136,0.2); color: #888; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.55rem; margin-left: 0.5rem;">✓ CLOSED</span>' : 
+                '<span class="live-dot"></span>';
+            
+            return `
+            <div class="position-card ${isClosed ? '' : 'live-pulse'}" style="background: rgba(255,255,255,0.03); border: ${cardBorder}; border-radius: 12px; padding: 1rem; margin-bottom: 0.75rem; opacity: ${cardOpacity};">
+                <!-- Header Row: Stock Info & P&L -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        ${statusBadge}
+                        <div class="stock-avatar" style="width: 36px; height: 36px; font-size: 0.75rem;">${sym.substring(0,2)}</div>
+                        <div>
+                            <h4 style="margin: 0; font-size: 1rem; font-weight: 700;">${sym}</h4>
+                            <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.2rem;">
+                                <span class="segment-tag ${segmentClass}" style="padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.6rem;">${segment}</span>
+                                <span class="signal-badge ${pos.signal === 'BUY' ? 'buy' : pos.signal === 'SELL' ? 'sell' : ''}" style="padding: 0.15rem 0.4rem; font-size: 0.6rem; ${pos.signal === 'CLOSED' ? 'background: rgba(136,136,136,0.2); color: #888;' : ''}">${pos.signal}</span>
+                                <span style="font-size: 0.65rem; color: #888;">Qty: ${pos.qty}</span>
                             </div>
                         </div>
-                        <div style="text-align: right;">
-                            <div class="pnl ${pnlClass}" style="font-weight: 800; font-size: 1.2rem;">${formatPnL(pnl)}</div>
-                            <div style="font-size: 0.7rem; color: #888;">LTP: ₹${parseFloat(ltp).toFixed(2)}</div>
-                        </div>
                     </div>
-                    
-                    <!-- Price Levels Grid -->
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem;">
-                        <div style="text-align: center; padding: 0.5rem; background: rgba(0,212,170,0.1); border-radius: 8px;">
-                            <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Entry</div>
-                            <div style="font-weight: 700; color: #00d4aa; font-size: 0.85rem;">₹${entryPrice.toFixed(2)}</div>
-                            <div style="font-size: 0.55rem; color: #666;">${entryTime}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.5rem; background: rgba(255,71,87,0.1); border-radius: 8px; ${isTrailing ? 'border: 1px dashed rgba(255,71,87,0.3);' : ''}">
-                            <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Stop Loss</div>
-                            <div style="font-weight: 700; color: #ff4757; font-size: 0.85rem;">${sl > 0 ? '₹' + sl.toFixed(2) : '--'}</div>
-                            <div style="font-size: 0.55rem; color: #ff4757;">${sl > 0 ? ((entryPrice - sl) / entryPrice * -100).toFixed(1) + '%' : ''}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.5rem; background: rgba(0,255,136,0.1); border-radius: 8px;">
-                            <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Target</div>
-                            <div style="font-weight: 700; color: #00ff88; font-size: 0.85rem;">${target > 0 ? '₹' + target.toFixed(2) : '--'}</div>
-                            <div style="font-size: 0.55rem; color: #00ff88;">${target > 0 ? '+' + ((target - entryPrice) / entryPrice * 100).toFixed(1) + '%' : ''}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.5rem; background: ${isTrailing ? 'rgba(255,165,2,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius: 8px; ${isTrailing ? 'border: 1px solid rgba(255,165,2,0.5);' : ''}">
-                            <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">${isTrailing ? '🔄 Trail SL' : 'Trail SL'}</div>
-                            <div style="font-weight: 700; color: ${isTrailing ? '#ffa502' : '#666'}; font-size: 0.85rem;">${trailSl > 0 ? '₹' + trailSl.toFixed(2) : '--'}</div>
-                            <div style="font-size: 0.55rem; color: ${isTrailing ? '#ffa502' : '#666'};">${isTrailing ? 'ACTIVE' : ''}</div>
-                        </div>
+                    <div style="text-align: right;">
+                        <div class="pnl ${pnlClass}" style="font-weight: 800; font-size: 1.2rem;">${formatPnL(pnl)}</div>
+                        <div style="font-size: 0.7rem; color: #888;">${isClosed ? 'Realized P&L' : 'LTP: ₹' + parseFloat(ltp).toFixed(2)}</div>
                     </div>
-                    
-                    <!-- Progress Bar to Target -->
-                    ${target > 0 && sl > 0 ? `
-                    <div style="position: relative; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-                        <div style="position: absolute; left: 0; top: 0; height: 100%; width: ${progress}%; background: linear-gradient(90deg, #ff4757 0%, #ffa502 50%, #00ff88 100%); border-radius: 3px; transition: width 0.3s;"></div>
-                        <div style="position: absolute; left: ${((entryPrice - sl) / (target - sl) * 100).toFixed(1)}%; top: -2px; width: 2px; height: 10px; background: #00d4aa;"></div>
+                </div>
+                
+                <!-- Price Levels Grid -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem;">
+                    <div style="text-align: center; padding: 0.5rem; background: rgba(0,212,170,0.1); border-radius: 8px;">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Entry</div>
+                        <div style="font-weight: 700; color: #00d4aa; font-size: 0.85rem;">₹${entryPrice.toFixed(2)}</div>
+                        <div style="font-size: 0.55rem; color: #666;">${entryTime}</div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 0.55rem; color: #666; margin-top: 0.2rem;">
-                        <span>SL</span>
-                        <span style="color: #00d4aa;">Entry</span>
-                        <span>Target</span>
+                    <div style="text-align: center; padding: 0.5rem; background: rgba(255,71,87,0.1); border-radius: 8px; ${isTrailing ? 'border: 1px dashed rgba(255,71,87,0.3);' : ''}">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Stop Loss</div>
+                        <div style="font-weight: 700; color: #ff4757; font-size: 0.85rem;">${sl > 0 ? '₹' + sl.toFixed(2) : '--'}</div>
+                        <div style="font-size: 0.55rem; color: #ff4757;">${sl > 0 ? ((entryPrice - sl) / entryPrice * -100).toFixed(1) + '%' : ''}</div>
                     </div>
-                    ` : ''}
-                </div>`;
-            }
-            container.innerHTML = html;
+                    <div style="text-align: center; padding: 0.5rem; background: rgba(0,255,136,0.1); border-radius: 8px;">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Target</div>
+                        <div style="font-weight: 700; color: #00ff88; font-size: 0.85rem;">${target > 0 ? '₹' + target.toFixed(2) : '--'}</div>
+                        <div style="font-size: 0.55rem; color: #00ff88;">${target > 0 ? '+' + ((target - entryPrice) / entryPrice * 100).toFixed(1) + '%' : ''}</div>
+                    </div>
+                    <div style="text-align: center; padding: 0.5rem; background: ${isTrailing ? 'rgba(255,165,2,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius: 8px; ${isTrailing ? 'border: 1px solid rgba(255,165,2,0.5);' : ''}">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">${isTrailing ? '🔄 Trail SL' : 'Trail SL'}</div>
+                        <div style="font-weight: 700; color: ${isTrailing ? '#ffa502' : '#666'}; font-size: 0.85rem;">${trailSl > 0 ? '₹' + trailSl.toFixed(2) : '--'}</div>
+                        <div style="font-size: 0.55rem; color: ${isTrailing ? '#ffa502' : '#666'};">${isTrailing ? 'ACTIVE' : ''}</div>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar to Target (only for open positions with SL/Target set) -->
+                ${!isClosed && target > 0 && sl > 0 ? `
+                <div style="position: relative; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                    <div style="position: absolute; left: 0; top: 0; height: 100%; width: ${progress}%; background: linear-gradient(90deg, #ff4757 0%, #ffa502 50%, #00ff88 100%); border-radius: 3px; transition: width 0.3s;"></div>
+                    <div style="position: absolute; left: ${((entryPrice - sl) / (target - sl) * 100).toFixed(1)}%; top: -2px; width: 2px; height: 10px; background: #00d4aa;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.55rem; color: #666; margin-top: 0.2rem;">
+                    <span>SL</span>
+                    <span style="color: #00d4aa;">Entry</span>
+                    <span>Target</span>
+                </div>
+                ` : ''}
+            </div>`;
         }
         
         function updateWatchlist(watchlist) {
