@@ -918,41 +918,69 @@ DASHBOARD_HTML = """
             container.innerHTML = html;
         }
         
-        // P&L Chart
+        // P&L Chart - Weekly View
         let pnlChart = null;
         function initPnLChart() {
             const ctx = document.getElementById('pnlChart').getContext('2d');
+            
+            // Generate last 7 days labels
+            const dayLabels = [];
+            const today = new Date();
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                dayLabels.push(d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' }));
+            }
+            
             pnlChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+                    labels: dayLabels,
                     datasets: [{
-                        label: 'Daily P&L',
-                        data: [0, 0, 0, 0, 0],
+                        label: 'Daily P&L (₹)',
+                        data: [0, 0, 0, 0, 0, 0, 0],
                         borderColor: '#00d4aa',
-                        backgroundColor: 'rgba(0, 212, 170, 0.1)',
+                        backgroundColor: 'rgba(0, 212, 170, 0.15)',
                         fill: true,
                         tension: 0.4,
                         pointBackgroundColor: '#00d4aa',
                         pointBorderColor: '#fff',
-                        pointRadius: 6
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 8
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 32, 44, 0.95)',
+                            titleColor: '#fff',
+                            bodyColor: '#00ff88',
+                            borderColor: '#00d4aa',
+                            borderWidth: 1,
+                            displayColors: false,
+                            callbacks: {
+                                label: ctx => {
+                                    const val = ctx.parsed.y;
+                                    return (val >= 0 ? '+' : '') + '₹' + val.toLocaleString('en-IN');
+                                }
+                            }
+                        }
                     },
                     scales: {
                         y: {
-                            beginAtZero: true,
-                            grid: { color: '#333' },
-                            ticks: { color: '#888', callback: v => '₹' + v }
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { 
+                                color: '#888', 
+                                callback: v => (v >= 0 ? '+' : '') + '₹' + v.toLocaleString('en-IN')
+                            }
                         },
                         x: {
-                            grid: { color: '#333' },
-                            ticks: { color: '#888' }
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#aaa', font: { weight: '600' } }
                         }
                     }
                 }
@@ -961,8 +989,35 @@ DASHBOARD_HTML = """
         
         function updatePnLChart(data) {
             if (!pnlChart) initPnLChart();
-            const history = data.pnl_history || [0, 0, 0, 0, 0];
+            
+            // Get history from API (should have 7 values) or calculate from today's P&L
+            let history = data.pnl_history || [];
+            
+            // Always need 7 values for the chart
+            while (history.length < 7) {
+                history.unshift(0); // Pad with zeros at start
+            }
+            history = history.slice(-7); // Keep only last 7
+            
+            // Calculate today's live P&L from positions if we have them
+            const positions = data.positions || {};
+            let todayPnl = 0;
+            Object.values(positions).forEach(pos => {
+                todayPnl += pos.unrealised_pnl || pos.pnl || 0;
+            });
+            
+            // Add any realized P&L from today's trades
+            todayPnl += data.daily_pnl || 0;
+            
+            // Update today's value (last element)
+            history[6] = todayPnl;
+            
             pnlChart.data.datasets[0].data = history;
+            
+            // Update colors based on P&L values
+            const colors = history.map(v => v >= 0 ? '#00ff88' : '#ff4757');
+            pnlChart.data.datasets[0].pointBackgroundColor = colors;
+            
             pnlChart.update();
         }
         
