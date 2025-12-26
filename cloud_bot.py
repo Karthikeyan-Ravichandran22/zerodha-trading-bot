@@ -960,13 +960,35 @@ class CloudTradingBot:
                         trail_sl = sl_price  # No trailing until price moves in favor
                         entry_time = ''
                     
-                    # Determine exit reason for closed positions
+                    # Get LTP and actual exit price
                     ltp = float(pos.get('ltp', 0) or 0)
+                    
+                    # For closed positions, get actual exit price from Angel One (not LTP!)
+                    # buyavgprice = avg price at which shares were bought
+                    # sellavgprice = avg price at which shares were sold
+                    buy_avg_price = float(pos.get('buyavgprice', 0) or pos.get('buyaverage', 0) or 0)
+                    sell_avg_price = float(pos.get('sellavgprice', 0) or pos.get('sellaverage', 0) or 0)
+                    
+                    # Determine exit price for closed positions
+                    exit_price = 0
+                    if net_qty == 0:  # Position is closed
+                        # Determine original signal direction
+                        buyqty_check = int(pos.get('buyqty', 0) or pos.get('daybuyqty', 0) or 0)
+                        sellqty_check = int(pos.get('sellqty', 0) or pos.get('daysellqty', 0) or 0)
+                        
+                        if buyqty_check > 0:
+                            # Was a BUY position, exit is the SELL price
+                            exit_price = sell_avg_price if sell_avg_price > 0 else ltp
+                        else:
+                            # Was a SELL position, exit is the BUY price
+                            exit_price = buy_avg_price if buy_avg_price > 0 else ltp
+                    
+                    # Determine exit reason for closed positions - use exit_price not LTP
                     exit_reason = ''
-                    if net_qty == 0 and entry_price > 0:  # Position is closed
-                        if target_price > 0 and ltp >= target_price:
+                    if net_qty == 0 and entry_price > 0 and exit_price > 0:  # Position is closed
+                        if target_price > 0 and exit_price >= target_price:
                             exit_reason = 'TARGET_HIT'
-                        elif sl_price > 0 and ltp <= sl_price:
+                        elif sl_price > 0 and exit_price <= sl_price:
                             exit_reason = 'SL_HIT'
                         else:
                             # Neither target nor SL hit - must be market close or manual exit
@@ -978,6 +1000,7 @@ class CloudTradingBot:
                         'qty': abs(net_qty),
                         'entry_price': entry_price,
                         'ltp': ltp,
+                        'exit_price': exit_price,  # Actual exit price for closed positions
                         'pnl': pnl,
                         'realised_pnl': realised,
                         'unrealised_pnl': unrealised,

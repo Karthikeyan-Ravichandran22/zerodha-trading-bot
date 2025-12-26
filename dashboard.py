@@ -883,6 +883,8 @@ DASHBOARD_HTML = """
         function renderPositionCard(sym, pos, isClosed) {
             const ltp = pos.ltp || pos.entry_price || 0;
             const entryPrice = pos.entry_price || 0;
+            // For closed positions, use actual exit_price from API, not LTP
+            const exitPrice = isClosed ? (pos.exit_price || pos.ltp || entryPrice) : ltp;
             // For closed positions, show realised P&L
             const pnl = isClosed ? (pos.realised_pnl || pos.pnl || 0) : (pos.unrealised_pnl || pos.pnl || 0);
             const pnlClass = pnl >= 0 ? 'profit' : 'loss';
@@ -970,8 +972,8 @@ DASHBOARD_HTML = """
                     ${isClosed ? `
                     <div style="text-align: center; padding: 0.5rem; background: rgba(52,152,219,0.2); border-radius: 8px; border: 2px solid rgba(52,152,219,0.6);">
                         <div style="font-size: 0.6rem; color: #3498db; text-transform: uppercase; margin-bottom: 0.2rem; font-weight: 700;">📍 EXIT</div>
-                        <div style="font-weight: 800; color: #3498db; font-size: 0.9rem;">₹${parseFloat(ltp).toFixed(2)}</div>
-                        <div style="font-size: 0.55rem; color: ${ltp >= entryPrice ? '#00ff88' : '#ff4757'}; font-weight: 600;">${entryPrice > 0 ? (ltp >= entryPrice ? '+' : '') + ((ltp - entryPrice) / entryPrice * 100).toFixed(2) + '%' : ''}</div>
+                        <div style="font-weight: 800; color: #3498db; font-size: 0.9rem;">₹${parseFloat(exitPrice).toFixed(2)}</div>
+                        <div style="font-size: 0.55rem; color: ${exitPrice >= entryPrice ? '#00ff88' : '#ff4757'}; font-weight: 600;">${entryPrice > 0 ? (exitPrice >= entryPrice ? '+' : '') + ((exitPrice - entryPrice) / entryPrice * 100).toFixed(2) + '%' : ''}</div>
                     </div>
                     ` : ''}
                 </div>
