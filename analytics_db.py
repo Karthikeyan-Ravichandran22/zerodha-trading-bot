@@ -407,14 +407,48 @@ class AnalyticsDatabase:
         
         result = cursor.fetchone()
         
-        total = result[0] or 0
-        wins = result[1] or 0
-        losses = result[2] or 0
-        total_pnl = result[3] or 0
-        avg_win = result[4] or 0
-        avg_loss = result[5] or 0
-        best_trade = result[6] or 0
-        worst_trade = result[7] or 0
+        trades_total = result[0] or 0
+        trades_wins = result[1] or 0
+        trades_losses = result[2] or 0
+        trades_pnl = result[3] or 0
+        trades_avg_win = result[4] or 0
+        trades_avg_loss = result[5] or 0
+        trades_best = result[6] or 0
+        trades_worst = result[7] or 0
+        
+        # Also get stats from positions table (new storage)
+        cursor.execute('''
+            SELECT COUNT(*), 
+                   SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END),
+                   SUM(CASE WHEN pnl <= 0 THEN 1 ELSE 0 END),
+                   SUM(pnl),
+                   AVG(CASE WHEN pnl > 0 THEN pnl END),
+                   AVG(CASE WHEN pnl < 0 THEN pnl END),
+                   MAX(pnl),
+                   MIN(pnl)
+            FROM positions WHERE status = 'CLOSED'
+        ''')
+        
+        pos_result = cursor.fetchone()
+        
+        pos_total = pos_result[0] or 0
+        pos_wins = pos_result[1] or 0
+        pos_losses = pos_result[2] or 0
+        pos_pnl = pos_result[3] or 0
+        pos_avg_win = pos_result[4] or 0
+        pos_avg_loss = pos_result[5] or 0
+        pos_best = pos_result[6] or 0
+        pos_worst = pos_result[7] or 0
+        
+        # Combine both tables
+        total = trades_total + pos_total
+        wins = trades_wins + pos_wins
+        losses = trades_losses + pos_losses
+        total_pnl = trades_pnl + pos_pnl
+        avg_win = pos_avg_win if pos_avg_win else trades_avg_win
+        avg_loss = pos_avg_loss if pos_avg_loss else trades_avg_loss
+        best_trade = max(trades_best, pos_best)
+        worst_trade = min(trades_worst, pos_worst) if trades_worst != 0 else pos_worst
         
         conn.close()
         
@@ -467,8 +501,33 @@ class AnalyticsDatabase:
         columns = ['date', 'pnl', 'trades', 'win_rate']
         data = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
+        # Also get data from positions table
+        cursor.execute('''
+            SELECT date, SUM(pnl) as total_pnl, COUNT(*) as trades,
+                   (SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) as win_rate
+            FROM positions
+            WHERE date >= ? AND status = 'CLOSED'
+            GROUP BY date
+            ORDER BY date ASC
+        ''', (start_date,))
+        
+        pos_data = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        # Merge data - positions table takes priority
+        data_dict = {d['date']: d for d in data}
+        for pd in pos_data:
+            if pd['date'] in data_dict:
+                # Combine
+                data_dict[pd['date']]['pnl'] += pd['pnl']
+                data_dict[pd['date']]['trades'] += pd['trades']
+            else:
+                data_dict[pd['date']] = pd
+        
+        # Sort by date
+        merged_data = sorted(data_dict.values(), key=lambda x: x['date'])
+        
         conn.close()
-        return data
+        return merged_data
     
     def save_position(self, symbol, signal, entry_price, quantity, 
                       stop_loss=0, target=0, trail_sl=0, entry_time=None,
