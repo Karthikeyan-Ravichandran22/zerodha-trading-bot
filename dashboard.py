@@ -808,13 +808,17 @@ DASHBOARD_HTML = """
                 return;
             }
             
-            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>Entry</th><th>SL</th></tr></thead><tbody>';
+            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>Entry</th><th>LTP</th><th>P&L</th></tr></thead><tbody>';
             for (const [sym, pos] of arr) {
+                const ltp = pos.ltp || pos.entry_price || 0;
+                const pnl = pos.unrealised_pnl || pos.pnl || 0;
+                const pnlClass = pnl >= 0 ? 'profit' : 'loss';
                 html += `<tr>
                     <td><div class="stock-cell"><div class="stock-avatar">${sym.substring(0,2)}</div><div class="stock-info"><h4>${sym}</h4><span>Qty: ${pos.qty}</span></div></div></td>
                     <td><span class="signal-badge ${pos.signal === 'BUY' ? 'buy' : 'sell'}">${pos.signal}</span></td>
                     <td>₹${(pos.entry_price || 0).toFixed(2)}</td>
-                    <td>₹${(pos.trail_sl || pos.sl_price || 0).toFixed(2)}</td>
+                    <td>₹${parseFloat(ltp).toFixed(2)}</td>
+                    <td><span class="pnl ${pnlClass}">${formatPnL(pnl)}</span></td>
                 </tr>`;
             }
             html += '</tbody></table>';
@@ -850,12 +854,15 @@ DASHBOARD_HTML = """
                 return;
             }
             
-            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>P&L</th></tr></thead><tbody>';
-            for (const t of trades.slice(0, 5)) {
+            let html = '<table><thead><tr><th>Stock</th><th>Type</th><th>Price</th><th>Time (IST)</th></tr></thead><tbody>';
+            for (const t of trades.slice(0, 10)) {
+                const time = t.time_ist || t.time || '--:--';
+                const price = t.entry_price || t.price || t.averageprice || 0;
                 html += `<tr>
-                    <td>${t.symbol}</td>
+                    <td><div class="stock-cell"><div class="stock-avatar">${(t.symbol || '').substring(0,2)}</div><div class="stock-info"><h4>${t.symbol}</h4><span>Qty: ${t.qty || t.quantity || 0}</span></div></div></td>
                     <td><span class="signal-badge ${t.signal === 'BUY' ? 'buy' : 'sell'}">${t.signal}</span></td>
-                    <td><span class="pnl ${t.pnl >= 0 ? 'profit' : 'loss'}">${formatPnL(t.pnl)}</span></td>
+                    <td>₹${parseFloat(price).toFixed(2)}</td>
+                    <td style="font-size: 0.75rem; color: #888;">${time}</td>
                 </tr>`;
             }
             html += '</tbody></table>';
@@ -1027,7 +1034,7 @@ DASHBOARD_HTML = """
                 updateRiskMeter(data);
                 updateLivePrices(data.watchlist);
                 updateActivityLog(data.activity_logs || []);
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false});
+                document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', {hour12: false, timeZone: 'Asia/Kolkata'}) + ' IST';
             } catch (e) {
                 console.error('Fetch error:', e);
             }

@@ -799,17 +799,126 @@ class CloudTradingBot:
         except Exception as e:
             logger.debug(f"Failed to save positions file: {e}")
     
+    def _fetch_angel_trades(self):
+        """Fetch today's executed trades from Angel One account"""
+        try:
+            if not self.is_authenticated or not hasattr(self, 'angel_client'):
+                return []
+            
+            # Get today's orders from Angel One
+            order_book = self.angel_client.orderBook()
+            if not order_book.get('status') or not order_book.get('data'):
+                return []
+            
+            trades = []
+            today_str = datetime.now(IST).strftime('%Y-%m-%d')
+            
+            for order in order_book['data']:
+                # Only completed orders from today
+                if order.get('status') in ['complete', 'filled']:
+                    # Parse order time
+                    order_time = order.get('updatetime', order.get('ordertime', ''))
+                    
+                    trade = {
+                        'symbol': order.get('tradingsymbol', '').replace('-EQ', ''),
+                        'signal': order.get('transactiontype', 'BUY'),
+                        'action': order.get('transactiontype', 'BUY'),
+                        'entry_price': float(order.get('averageprice', 0) or 0),
+                        'qty': int(order.get('filledshares', 0) or order.get('quantity', 0)),
+                        'quantity': int(order.get('filledshares', 0) or order.get('quantity', 0)),
+                        'order_id': order.get('orderid', ''),
+                        'time': order_time.split(' ')[-1] if ' ' in order_time else order_time,
+                        'time_ist': order_time.split(' ')[-1] if ' ' in order_time else order_time,
+                        'pnl': 0,  # Calculate P&L from positions
+                        'status': 'executed',
+                        'product': order.get('producttype', 'INTRADAY'),
+                        'exchange': order.get('exchange', 'NSE')
+                    }
+                    trades.append(trade)
+            
+            logger.debug(f"📊 Fetched {len(trades)} executed trades from Angel One")
+            return trades
+            
+        except Exception as e:
+            logger.debug(f"Failed to fetch Angel trades: {e}")
+            return []
+    
+    def _fetch_angel_positions(self):
+        """Fetch open positions from Angel One account"""
+        try:
+            if not self.is_authenticated or not hasattr(self, 'angel_client'):
+                return {}
+            
+            # Get positions from Angel One
+            positions_resp = self.angel_client.position()
+            if not positions_resp.get('status') or not positions_resp.get('data'):
+                return {}
+            
+            positions = {}
+            for pos in positions_resp['data']:
+                # Only open positions with quantity
+                net_qty = int(pos.get('netqty', 0))
+                if net_qty != 0:
+                    symbol = pos.get('tradingsymbol', '').replace('-EQ', '')
+                    positions[symbol] = {
+                        'symbol': symbol,
+                        'signal': 'BUY' if net_qty > 0 else 'SELL',
+                        'qty': abs(net_qty),
+                        'entry_price': float(pos.get('averageprice', 0) or 0),
+                        'ltp': float(pos.get('ltp', 0) or 0),
+                        'pnl': float(pos.get('pnl', 0) or pos.get('realised', 0) or 0),
+                        'unrealised_pnl': float(pos.get('unrealised', 0) or 0),
+                        'product': pos.get('producttype', 'INTRADAY'),
+                        'exchange': pos.get('exchange', 'NSE')
+                    }
+            
+            logger.debug(f"📊 Fetched {len(positions)} open positions from Angel One")
+            return positions
+            
+        except Exception as e:
+            logger.debug(f"Failed to fetch Angel positions: {e}")
+            return {}
+    
     def _update_dashboard_files(self):
         """Periodically update all dashboard files for real-time display"""
         try:
-            # Update trades file
-            self._save_trades_to_file()
+            # Fetch live trades from Angel One
+            angel_trades = self._fetch_angel_trades()
             
-            # Update positions file
-            self._save_positions_to_file()
+            # Merge with local trades (prefer Angel data)
+            if angel_trades:
+                # Save Angel trades
+                os.makedirs('data', exist_ok=True)
+                trades_data = {
+                    'date': datetime.now(IST).strftime('%Y-%m-%d'),
+                    'trades': angel_trades,
+                    'total_pnl': sum(t.get('pnl', 0) for t in angel_trades),
+                    'trade_count': len(angel_trades),
+                    'source': 'angel_one',
+                    'last_updated': datetime.now(IST).strftime('%H:%M:%S IST')
+                }
+                with open('data/today_trades.json', 'w') as f:
+                    json.dump(trades_data, f, indent=2)
+            else:
+                # Fallback to local trades
+                self._save_trades_to_file()
+            
+            # Fetch live positions from Angel One
+            angel_positions = self._fetch_angel_positions()
+            
+            # Merge positions
+            if angel_positions:
+                os.makedirs('data', exist_ok=True)
+                with open('data/stock_positions.json', 'w') as f:
+                    json.dump(angel_positions, f, indent=2)
+            else:
+                # Fallback to local positions
+                self._save_positions_to_file()
             
             # Update broker status
             self.refresh_balance()
+            
+            logger.debug("📊 Dashboard files updated")
         except Exception as e:
             logger.debug(f"Dashboard update failed: {e}")
     
@@ -897,7 +1006,7 @@ NET P&L: ₹{net_pnl:+,.2f}
             
             # Save for dashboard
             import json
-            broker_status['last_updated'] = datetime.now().strftime('%H:%M:%S')
+            broker_status['last_updated'] = datetime.now(IST).strftime('%H:%M:%S IST')
             os.makedirs('data', exist_ok=True)
             with open('data/zerodha_status.json', 'w') as f:
                 json.dump(broker_status, f, indent=2)
