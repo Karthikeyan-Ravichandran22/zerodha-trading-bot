@@ -946,42 +946,49 @@ DASHBOARD_HTML = """
                 </div>
                 
                 <!-- Price Levels Grid -->
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem;">
+                <div style="display: grid; grid-template-columns: ${isClosed ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)'}; gap: 0.5rem; margin-bottom: 0.75rem;">
                     <div style="text-align: center; padding: 0.5rem; background: rgba(0,212,170,0.1); border-radius: 8px;">
                         <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Entry</div>
-                        <div style="font-weight: 700; color: #00d4aa; font-size: 0.85rem;">₹${entryPrice.toFixed(2)}</div>
-                        <div style="font-size: 0.55rem; color: #666;">${entryTime}</div>
+                        <div style="font-weight: 700; color: #00d4aa; font-size: 0.85rem;">₹\${entryPrice.toFixed(2)}</div>
+                        <div style="font-size: 0.55rem; color: #666;">\${entryTime}</div>
                     </div>
-                    <div style="text-align: center; padding: 0.5rem; background: rgba(255,71,87,0.1); border-radius: 8px; ${isTrailing ? 'border: 1px dashed rgba(255,71,87,0.3);' : ''}">
+                    <div style="text-align: center; padding: 0.5rem; background: rgba(255,71,87,0.1); border-radius: 8px;">
                         <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Stop Loss</div>
-                        <div style="font-weight: 700; color: #ff4757; font-size: 0.85rem;">${sl > 0 ? '₹' + sl.toFixed(2) : '--'}</div>
-                        <div style="font-size: 0.55rem; color: #ff4757;">${sl > 0 ? ((entryPrice - sl) / entryPrice * -100).toFixed(1) + '%' : ''}</div>
+                        <div style="font-weight: 700; color: #ff4757; font-size: 0.85rem;">\${sl > 0 ? '₹' + sl.toFixed(2) : '--'}</div>
+                        <div style="font-size: 0.55rem; color: #ff4757;">\${sl > 0 ? ((entryPrice - sl) / entryPrice * -100).toFixed(1) + '%' : ''}</div>
                     </div>
                     <div style="text-align: center; padding: 0.5rem; background: rgba(0,255,136,0.1); border-radius: 8px;">
                         <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">Target</div>
-                        <div style="font-weight: 700; color: #00ff88; font-size: 0.85rem;">${target > 0 ? '₹' + target.toFixed(2) : '--'}</div>
-                        <div style="font-size: 0.55rem; color: #00ff88;">${target > 0 ? '+' + ((target - entryPrice) / entryPrice * 100).toFixed(1) + '%' : ''}</div>
+                        <div style="font-weight: 700; color: #00ff88; font-size: 0.85rem;">\${target > 0 ? '₹' + target.toFixed(2) : '--'}</div>
+                        <div style="font-size: 0.55rem; color: #00ff88;">\${target > 0 ? '+' + ((target - entryPrice) / entryPrice * 100).toFixed(1) + '%' : ''}</div>
                     </div>
-                    <div style="text-align: center; padding: 0.5rem; background: ${isTrailing ? 'rgba(255,165,2,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius: 8px; ${isTrailing ? 'border: 1px solid rgba(255,165,2,0.5);' : ''}">
-                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">${isTrailing ? '🔄 Trail SL' : 'Trail SL'}</div>
-                        <div style="font-weight: 700; color: ${isTrailing ? '#ffa502' : '#666'}; font-size: 0.85rem;">${trailSl > 0 ? '₹' + trailSl.toFixed(2) : '--'}</div>
-                        <div style="font-size: 0.55rem; color: ${isTrailing ? '#ffa502' : '#666'};">${isTrailing ? 'ACTIVE' : ''}</div>
+                    <div style="text-align: center; padding: 0.5rem; background: \${isTrailing ? 'rgba(255,165,2,0.15)' : 'rgba(255,255,255,0.03)'}; border-radius: 8px; \${isTrailing ? 'border: 1px solid rgba(255,165,2,0.5);' : ''}">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 0.2rem;">\${isTrailing ? '🔄 Trail SL' : 'Trail SL'}</div>
+                        <div style="font-weight: 700; color: \${isTrailing ? '#ffa502' : '#666'}; font-size: 0.85rem;">\${trailSl > 0 ? '₹' + trailSl.toFixed(2) : '--'}</div>
+                        <div style="font-size: 0.55rem; color: \${isTrailing ? '#ffa502' : '#666'};">\${isTrailing ? 'ACTIVE' : ''}</div>
                     </div>
+                    \${isClosed ? \`
+                    <div style="text-align: center; padding: 0.5rem; background: rgba(52,152,219,0.2); border-radius: 8px; border: 2px solid rgba(52,152,219,0.6);">
+                        <div style="font-size: 0.6rem; color: #3498db; text-transform: uppercase; margin-bottom: 0.2rem; font-weight: 700;">📍 EXIT</div>
+                        <div style="font-weight: 800; color: #3498db; font-size: 0.9rem;">₹\${parseFloat(ltp).toFixed(2)}</div>
+                        <div style="font-size: 0.55rem; color: \${ltp >= entryPrice ? '#00ff88' : '#ff4757'}; font-weight: 600;">\${entryPrice > 0 ? (ltp >= entryPrice ? '+' : '') + ((ltp - entryPrice) / entryPrice * 100).toFixed(2) + '%' : ''}</div>
+                    </div>
+                    \` : ''}
                 </div>
                 
                 <!-- Progress Bar to Target (only for open positions with SL/Target set) -->
-                ${!isClosed && target > 0 && sl > 0 ? `
+                \${!isClosed && target > 0 && sl > 0 ? \`
                 <div style="position: relative; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-                    <div style="position: absolute; left: 0; top: 0; height: 100%; width: ${progress}%; background: linear-gradient(90deg, #ff4757 0%, #ffa502 50%, #00ff88 100%); border-radius: 3px; transition: width 0.3s;"></div>
-                    <div style="position: absolute; left: ${((entryPrice - sl) / (target - sl) * 100).toFixed(1)}%; top: -2px; width: 2px; height: 10px; background: #00d4aa;"></div>
+                    <div style="position: absolute; left: 0; top: 0; height: 100%; width: \${progress}%; background: linear-gradient(90deg, #ff4757 0%, #ffa502 50%, #00ff88 100%); border-radius: 3px; transition: width 0.3s;"></div>
+                    <div style="position: absolute; left: \${((entryPrice - sl) / (target - sl) * 100).toFixed(1)}%; top: -2px; width: 2px; height: 10px; background: #00d4aa;"></div>
                 </div>
                 <div style="display: flex; justify-content: space-between; font-size: 0.55rem; color: #666; margin-top: 0.2rem;">
                     <span>SL</span>
                     <span style="color: #00d4aa;">Entry</span>
                     <span>Target</span>
                 </div>
-                ` : ''}
-            </div>`;
+                \` : ''}
+            </div>\`;
         }
         
         function updateWatchlist(watchlist) {
