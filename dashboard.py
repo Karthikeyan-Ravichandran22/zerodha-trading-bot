@@ -1532,10 +1532,10 @@ def get_dashboard_data():
     winning_trades = len([p for p in closed_positions if p.get('realised_pnl', p.get('pnl', 0)) > 0])
     win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
     
-    # Calculate profit factor (total wins / total losses)
+    # Calculate profit factor (total wins / total losses) - avoid Infinity for JSON
     total_wins = sum(p.get('realised_pnl', p.get('pnl', 0)) for p in closed_positions if p.get('realised_pnl', p.get('pnl', 0)) > 0)
     total_losses = abs(sum(p.get('realised_pnl', p.get('pnl', 0)) for p in closed_positions if p.get('realised_pnl', p.get('pnl', 0)) < 0))
-    profit_factor = (total_wins / total_losses) if total_losses > 0 else (float('inf') if total_wins > 0 else 0)
+    profit_factor = (total_wins / total_losses) if total_losses > 0 else (999.0 if total_wins > 0 else 0)
     
     # Load analytics from database (may have historical data)
     try:
@@ -1552,7 +1552,7 @@ def get_dashboard_data():
                 'total_trades': max(total_trades, db_all_time.get('total_trades', 0)),
                 'total_pnl': total_pnl if total_trades > 0 else db_all_time.get('total_pnl', 0),
                 'win_rate': win_rate if total_trades > 0 else db_all_time.get('win_rate', 0),
-                'profit_factor': profit_factor if total_trades > 0 else db_all_time.get('profit_factor', 0)
+                'profit_factor': min(profit_factor, 999) if total_trades > 0 else min(db_all_time.get('profit_factor', 0), 999)
             },
             'top_stocks': analytics_db.get_top_stocks()
         }
