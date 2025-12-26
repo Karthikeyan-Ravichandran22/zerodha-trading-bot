@@ -1162,6 +1162,141 @@ NET P&L: ₹{net_pnl:+,.2f}
         except Exception as e:
             logger.debug(f"Balance refresh failed: {e}")
     
+    def smart_cnc_conversion(self):
+        """
+        Smart CNC Conversion Logic - Runs at 2:30 PM and 3:00 PM
+        
+        Converts MIS (intraday) positions to CNC (delivery) if:
+        1. Position is currently in PROFIT
+        2. Expected additional profit to target > ₹100
+        3. Stock is in strong uptrend (for BUY positions)
+        
+        CNC Extra Costs: ~₹40-50 per ₹35,000 trade
+        - If profit potential > ₹100: Convert ✅
+        - If profit potential < ₹50: Don't convert ❌
+        """
+        try:
+            if not self.is_authenticated or not hasattr(self, 'angel_client'):
+                return
+            
+            # Get current positions
+            positions_resp = self.angel_client.position()
+            if not positions_resp or not positions_resp.get('status') or not positions_resp.get('data'):
+                return
+            
+            logger.info("🔄 Running Smart CNC Conversion Check...")
+            converted_count = 0
+            
+            for pos in positions_resp['data']:
+                try:
+                    symbol = pos.get('tradingsymbol', '').replace('-EQ', '').replace('-BE', '')
+                    net_qty = int(pos.get('netqty', 0) or 0)
+                    product_type = pos.get('producttype', '').upper()
+                    
+                    # Only check MIS/INTRADAY positions with open quantity
+                    if net_qty == 0 or product_type not in ['INTRADAY', 'MIS']:
+                        continue
+                    
+                    # Get prices
+                    entry_price = float(pos.get('averageprice', 0) or pos.get('buyavgprice', 0) or 0)
+                    ltp = float(pos.get('ltp', 0) or 0)
+                    
+                    if entry_price <= 0 or ltp <= 0:
+                        continue
+                    
+                    # Get target from position manager or calculate 3%
+                    pm_pos = position_manager.get_position(symbol)
+                    if pm_pos and pm_pos.get('target_price', 0) > 0:
+                        target_price = pm_pos.get('target_price')
+                    else:
+                        # Default 3% target for BUY
+                        target_price = round(entry_price * 1.03, 2)
+                    
+                    # Calculate current P&L and potential additional profit
+                    current_pnl = (ltp - entry_price) * abs(net_qty)
+                    potential_profit_to_target = (target_price - ltp) * abs(net_qty)
+                    
+                    # Decision logic
+                    # 1. Must be in profit
+                    if current_pnl <= 0:
+                        logger.debug(f"📊 {symbol}: Skipping - Not in profit (P&L: ₹{current_pnl:.2f})")
+                        continue
+                    
+                    # 2. Expected additional profit must be > ₹100 (to cover CNC extra cost of ~₹50)
+                    if potential_profit_to_target < 100:
+                        logger.info(f"📊 {symbol}: Skipping - Potential profit ₹{potential_profit_to_target:.2f} < ₹100 (not worth CNC cost)")
+                        continue
+                    
+                    # 3. Must have reasonable room to target (at least 0.5%)
+                    distance_to_target_pct = ((target_price - ltp) / ltp) * 100
+                    if distance_to_target_pct < 0.5:
+                        logger.info(f"📊 {symbol}: Skipping - Too close to target ({distance_to_target_pct:.2f}%)")
+                        continue
+                    
+                    # ✅ All conditions met - Convert to CNC
+                    logger.info(f"🔄 {symbol}: Converting MIS → CNC")
+                    logger.info(f"   Current P&L: ₹{current_pnl:.2f}")
+                    logger.info(f"   LTP: ₹{ltp} | Target: ₹{target_price}")
+                    logger.info(f"   Potential Additional Profit: ₹{potential_profit_to_target:.2f}")
+                    
+                    # Angel One position conversion API
+                    convert_params = {
+                        "exchange": pos.get('exchange', 'NSE'),
+                        "symboltoken": pos.get('symboltoken', ''),
+                        "producttype": "DELIVERY",  # CNC = DELIVERY in Angel One
+                        "newproducttype": "DELIVERY",
+                        "tradingsymbol": pos.get('tradingsymbol', ''),
+                        "transactiontype": "BUY" if net_qty > 0 else "SELL",
+                        "quantity": abs(net_qty),
+                        "type": "DAY"
+                    }
+                    
+                    try:
+                        # Angel One convertPosition API
+                        convert_response = self.angel_client.convertPosition(convert_params)
+                        
+                        if convert_response and convert_response.get('status'):
+                            converted_count += 1
+                            logger.info(f"✅ {symbol}: Successfully converted to CNC!")
+                            
+                            # Send Telegram notification
+                            try:
+                                from utils.notifications import send_telegram_message
+                                msg = f"""🔄 POSITION CONVERTED TO CNC
+
+📈 {symbol}
+Qty: {abs(net_qty)} shares
+Entry: ₹{entry_price:.2f}
+LTP: ₹{ltp:.2f}
+Target: ₹{target_price:.2f}
+
+💰 Current Profit: ₹{current_pnl:.2f}
+🎯 Potential Extra: ₹{potential_profit_to_target:.2f}
+
+⏰ Will hold overnight for target"""
+                                send_telegram_message(msg)
+                            except:
+                                pass
+                        else:
+                            error_msg = convert_response.get('message', 'Unknown error') if convert_response else 'No response'
+                            logger.warning(f"⚠️ {symbol}: Conversion failed - {error_msg}")
+                            
+                    except Exception as conv_err:
+                        logger.warning(f"⚠️ {symbol}: Conversion API error - {conv_err}")
+                    
+                except Exception as pos_err:
+                    logger.debug(f"Error processing position: {pos_err}")
+                    continue
+            
+            if converted_count > 0:
+                logger.info(f"✅ Smart CNC Conversion: Converted {converted_count} position(s)")
+            else:
+                logger.info("📊 Smart CNC Conversion: No positions met criteria for conversion")
+                
+        except Exception as e:
+            logger.error(f"Smart CNC conversion error: {e}")
+    
+    
     def run(self):
         """Main run loop"""
         logger.info("="*50)
@@ -1244,6 +1379,11 @@ NET P&L: ₹{net_pnl:+,.2f}
         schedule.every(30).seconds.do(self._update_dashboard_files)  # Update dashboard every 30s
         schedule.every().day.at("14:15").do(lambda: logger.info("🟡 Trading window ended. No new trades."))
         schedule.every().day.at("14:30").do(lambda: logger.info("🥇 Commodity trading window started! (Gold paper trading)"))
+        
+        # Smart CNC Conversion - runs at 2:30 PM and 3:00 PM to convert profitable MIS to CNC
+        schedule.every().day.at("14:30").do(self.smart_cnc_conversion)
+        schedule.every().day.at("15:00").do(self.smart_cnc_conversion)
+        
         schedule.every().day.at("15:30").do(self.daily_summary)
         schedule.every().day.at("00:01").do(self.reset_daily)
         

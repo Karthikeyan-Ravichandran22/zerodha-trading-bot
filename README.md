@@ -200,6 +200,45 @@ python main.py --scan-now            # Scan and start
 - Daily trade limits
 - Max positions limit
 
+### ✅ Smart CNC Conversion (NEW!)
+
+**Problem:** Intraday (MIS) positions are auto-squared at 3:15-3:30 PM, potentially cutting profitable trades short.
+
+**Solution:** Bot automatically converts profitable MIS positions to CNC (delivery) near market close if the potential profit justifies the extra cost.
+
+#### Conversion Logic:
+
+| Condition | Action |
+|-----------|--------|
+| Potential profit to target > ₹100 | ✅ Convert to CNC |
+| Potential profit to target < ₹50 | ❌ Don't convert |
+| Position NOT in profit | ❌ Don't convert |
+| Distance to target < 0.5% | ❌ Don't convert (too close) |
+
+#### Cost Analysis (MIS vs CNC):
+
+| Charge Type | MIS (Intraday) | CNC (Delivery) |
+|-------------|----------------|----------------|
+| STT | 0.025% (sell only) | 0.1% (buy + sell) |
+| Stamp Duty | 0.003% (buy) | 0.015% (buy) |
+| DP Charges | ₹0 | ₹15-20 per sell |
+| **Extra CNC Cost** | - | **~₹40-50** per ₹35,000 trade |
+
+#### Schedule:
+- **2:30 PM** - First CNC conversion check
+- **3:00 PM** - Second CNC conversion check
+
+#### Example:
+```
+BPCL trade:
+- Entry: ₹364.75 | LTP: ₹368.00 | Target: ₹375.69
+- Current Profit: ₹325
+- Potential to target: ₹770
+
+Decision: ₹770 > ₹100 → ✅ CONVERT TO CNC
+Result: Position held overnight, exits at target next day
+```
+
 ---
 
 ## 🏗️ PROJECT ARCHITECTURE
@@ -498,6 +537,12 @@ MIT License - Use at your own risk!
 ---
 
 ## 📝 Changelog
+
+### v1.1 (December 26, 2025) - Smart CNC Conversion
+- ✅ NEW: Smart CNC Conversion - Auto-converts profitable MIS to CNC at 2:30 PM and 3:00 PM
+- ✅ Conversion criteria: Potential profit > ₹100, currently in profit, > 0.5% to target
+- ✅ Telegram notification when position is converted
+- ✅ Cost-aware logic: Only converts if extra profit justifies ~₹50 CNC cost
 
 ### v1.0-stable (December 26, 2025)
 - ✅ Fixed exit price to use actual sell average price (not LTP)
