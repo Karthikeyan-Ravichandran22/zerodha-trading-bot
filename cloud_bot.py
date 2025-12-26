@@ -51,7 +51,10 @@ class CloudTradingBot:
         self.capital = capital_manager.get_capital()
         self.risk_manager = RiskManager(self.capital)
         self.data_fetcher = DataFetcher()
-        self.strategy = MultiConfirmationScalper(
+        
+        # Use Gold 93% Win Rate Strategy (from backtest)
+        from strategies.gold_93_live import Gold93Strategy
+        self.strategy = Gold93Strategy(
             data_fetcher=self.data_fetcher,
             risk_manager=self.risk_manager
         )
