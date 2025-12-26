@@ -931,7 +931,21 @@ class CloudTradingBot:
                     else:
                         # Auto-calculate default SL/Target based on strategy percentages
                         # Default: 1.5% SL, 3% Target (2:1 Risk-Reward)
-                        signal_type = 'BUY' if net_qty > 0 else 'SELL'
+                        
+                        # Determine original signal direction (even for closed positions)
+                        buyqty = int(pos.get('buyqty', 0) or pos.get('daybuyqty', 0) or 0)
+                        sellqty = int(pos.get('sellqty', 0) or pos.get('daysellqty', 0) or 0)
+                        
+                        if net_qty > 0:
+                            signal_type = 'BUY'
+                        elif net_qty < 0:
+                            signal_type = 'SELL'
+                        elif buyqty > 0:
+                            # Closed position that was originally a BUY
+                            signal_type = 'BUY'
+                        else:
+                            # Closed position that was originally a SELL (or unknown)
+                            signal_type = 'SELL' if sellqty > 0 else 'BUY'  # Default to BUY
                         
                         if signal_type == 'BUY' and entry_price > 0:
                             sl_price = round(entry_price * 0.985, 2)  # 1.5% below entry
