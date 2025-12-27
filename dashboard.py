@@ -704,6 +704,24 @@ DASHBOARD_HTML = """
             </table>
         </div>
         
+        <!-- Weekly Stock Selection Section -->
+        <div class="section animate" style="margin-bottom: 1.5rem;">
+            <div class="section-header">
+                <h2 class="section-title"><i class="fas fa-chart-line"></i> Weekly Stock Selection</h2>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">
+                    <i class="fas fa-sync-alt"></i> Updates every Sunday 6:00 PM
+                </span>
+            </div>
+            
+            <div id="stock-selection-content">
+                <!-- Loading state -->
+                <div style="text-align: center; padding: 2rem; color: #888;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 0.5rem;"></i>
+                    <div>Loading optimization report...</div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Trade History Section -->
         <div class="section animate" style="margin-bottom: 1.5rem;">
             <div class="section-header">
@@ -1465,6 +1483,176 @@ DASHBOARD_HTML = """
             </div>`;
         }
         
+        // Load Stock Selection Report
+        async function loadStockSelection() {
+            try {
+                const response = await fetch('/api/stock-selection-report');
+                const data = await response.json();
+                
+                const container = document.getElementById('stock-selection-content');
+                
+                if (data.error || !data.timestamp) {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 2rem; color: #888;">
+                            <i class="fas fa-info-circle" style="font-size: 2rem; margin-bottom: 0.5rem;"></i>
+                            <div>${data.message || 'No optimization has run yet'}</div>
+                            <div style="font-size: 0.8rem; margin-top: 0.5rem;">Next run: Sunday 6:00 PM</div>
+                        </div>`;
+                    return;
+                }
+                
+                // Format timestamp
+                const timestamp = new Date(data.timestamp);
+                const timeStr = timestamp.toLocaleString('en-IN', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                // Build HTML
+                let html = `
+                    <div style="background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(168,85,247,0.1)); 
+                                padding: 1rem; border-radius: 12px; margin-bottom: 1rem;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px;">Last Run</div>
+                                <div style="font-size: 0.9rem; color: var(--text); margin-top: 0.25rem;">
+                                    <i class="fas fa-clock"></i> ${timeStr}
+                                </div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px;">Universe Scanned</div>
+                                <div style="font-size: 1.2rem; font-weight: 700; color: var(--accent); margin-top: 0.25rem;">
+                                    ${data.universe_size} stocks
+                                </div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px;">Selected</div>
+                                <div style="font-size: 1.2rem; font-weight: 700; color: #10b981; margin-top: 0.25rem;">
+                                    ${data.selected_count} stocks
+                                </div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 1px;">Backtest Period</div>
+                                <div style="font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: 0.25rem;">
+                                    ${data.backtest_days} days
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Filter Funnel -->
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--text);">
+                            <i class="fas fa-filter"></i> Filter Pipeline
+                        </h3>
+                        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 8px;">
+                            ${renderFilterStage('Universe', data.filters.liquidity.total, data.filters.liquidity.total, true)}
+                            ${renderFilterStage('Liquidity (>5L vol)', data.filters.liquidity.passed, data.filters.liquidity.total)}
+                            ${renderFilterStage('Volatility (1.5-4%)', data.filters.volatility.passed, data.filters.volatility.total)}
+                            ${renderFilterStage('Performance (≥70% WR)', data.filters.performance.passed, data.filters.performance.total)}
+                            ${renderFilterStage('Sector Diversity', data.filters.sector.passed, data.filters.sector.total, false, true)}
+                        </div>
+                    </div>
+                    
+                    <!-- Top 10 Stocks Preview -->
+                    <div style="margin-bottom: 1rem;">
+                        <h3 style="font-size: 0.9rem; margin-bottom: 0.75rem; color: var(--text);">
+                            <i class="fas fa-star"></i> Top 10 Selected Stocks
+                        </h3>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; font-size: 0.75rem;">
+                                <thead>
+                                    <tr style="background: rgba(255,255,255,0.05);">
+                                        <th style="padding: 0.5rem; text-align: left;">#</th>
+                                        <th style="padding: 0.5rem; text-align: left;">Symbol</th>
+                                        <th style="padding: 0.5rem; text-align: left;">Sector</th>
+                                        <th style="padding: 0.5rem; text-align: right;">P&L</th>
+                                        <th style="padding: 0.5rem; text-align: right;">Win Rate</th>
+                                        <th style="padding: 0.5rem; text-align: right;">PF</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                
+                // Show top 10
+                const top10 = data.selected_stocks.slice(0, 10);
+                top10.forEach(stock => {
+                    const pnlColor = stock.pnl >= 0 ? '#10b981' : '#ef4444';
+                    html += `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td style="padding: 0.5rem;">${stock.rank}</td>
+                            <td style="padding: 0.5rem; font-weight: 600;">${stock.symbol}</td>
+                            <td style="padding: 0.5rem; color: #888;">${stock.sector}</td>
+                            <td style="padding: 0.5rem; text-align: right; color: ${pnlColor}; font-weight: 600;">
+                                ₹${stock.pnl.toFixed(0)}
+                            </td>
+                            <td style="padding: 0.5rem; text-align: right;">${stock.win_rate.toFixed(0)}%</td>
+                            <td style="padding: 0.5rem; text-align: right;">${stock.profit_factor.toFixed(1)}</td>
+                        </tr>`;
+                });
+                
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                        ${data.selected_stocks.length > 10 ? `
+                            <div style="text-align: center; margin-top: 0.75rem;">
+                                <button onclick="showFullReport()" style="background: var(--accent); color: white; 
+                                        border: none; padding: 0.5rem 1.5rem; border-radius: 6px; cursor: pointer;
+                                        font-size: 0.8rem; font-weight: 600;">
+                                    <i class="fas fa-list"></i> View All ${data.selected_stocks.length} Stocks
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>`;
+                
+                container.innerHTML = html;
+                
+                // Store data globally for modal
+                window.stockSelectionData = data;
+                
+            } catch (error) {
+                console.error('Error loading stock selection:', error);
+                document.getElementById('stock-selection-content').innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #ef4444;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 0.5rem;"></i>
+                        <div>Error loading report</div>
+                    </div>`;
+            }
+        }
+        
+        // Helper function to render filter stages
+        function renderFilterStage(name, passed, total, isFirst = false, isLast = false) {
+            const percentage = total > 0 ? (passed / total * 100) : 0;
+            const color = percentage >= 70 ? '#10b981' : percentage >= 50 ? '#f59e0b' : '#ef4444';
+            
+            return `
+                <div style="margin-bottom: ${isLast ? '0' : '0.5rem'};">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                        <div style="font-size: 0.75rem; color: var(--text);">
+                            ${isFirst ? '📊' : '↓'} ${name}
+                        </div>
+                        <div style="font-size: 0.75rem; font-weight: 600; color: ${color};">
+                            ${passed}/${total} ${isLast ? '✅' : ''}
+                        </div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px; overflow: hidden;">
+                        <div style="background: ${color}; height: 100%; width: ${percentage}%; transition: width 0.3s;"></div>
+                    </div>
+                </div>`;
+        }
+        
+        // Show full report modal (placeholder for now)
+        function showFullReport() {
+            alert('Full report modal - Coming in next update!\\n\\nFor now, check the logs or API endpoint for complete details.');
+        }
+        
+        // Load stock selection on page load
+        loadStockSelection();
+        
         // Load trading dates on page load
         loadTradingDates();
     </script>
@@ -1670,6 +1858,30 @@ def api_positions_by_date(date):
         return jsonify({'positions': positions, 'date': date})
     except Exception as e:
         return jsonify({'positions': [], 'date': date, 'error': str(e)})
+
+
+@app.route('/api/stock-selection-report')
+def api_stock_selection_report():
+    """Get the latest weekly stock selection report"""
+    try:
+        import json
+        import os
+        report_file = os.path.join('data', 'stock_selection_report.json')
+        
+        if os.path.exists(report_file):
+            with open(report_file, 'r') as f:
+                report_data = json.load(f)
+            return jsonify(report_data)
+        else:
+            # Return empty report if file doesn't exist yet
+            return jsonify({
+                'timestamp': None,
+                'universe_size': 200,
+                'selected_count': 0,
+                'message': 'No optimization has run yet. Next run: Sunday 6:00 PM'
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 
 def run_dashboard(port=5050):

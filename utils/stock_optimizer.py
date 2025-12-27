@@ -394,6 +394,62 @@ class StockOptimizer:
         """Get recommended stocks for this week with professional report"""
         best_stocks, all_results = self.find_best_stocks()
         
+        # Prepare detailed data for dashboard
+        selected_results = [x for x in all_results if x['symbol'] in best_stocks]
+        selected_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        
+        # Calculate filter statistics
+        liquidity_passed = len([r for r in all_results if r.get('liquidity_ok', False)])
+        volatility_passed = len([r for r in all_results if r.get('liquidity_ok', False) and r.get('volatility_ok', False)])
+        performance_passed = len([r for r in all_results if r.get('liquidity_ok', False) and 
+                                  r.get('volatility_ok', False) and r.get('pnl', 0) > 0 and 
+                                  r.get('win_rate', 0) >= 70])
+        
+        # Sector distribution
+        sector_distribution = {}
+        for r in selected_results:
+            sector = self.SECTOR_MAP.get(r['symbol'], "Other")
+            sector_distribution[sector] = sector_distribution.get(sector, 0) + 1
+        
+        # Create detailed JSON report for dashboard
+        dashboard_report = {
+            "timestamp": datetime.now().isoformat(),
+            "universe_size": len(self.ALL_CANDIDATES),
+            "selected_count": len(best_stocks),
+            "backtest_days": 14,
+            "filters": {
+                "liquidity": {"passed": liquidity_passed, "total": len(self.ALL_CANDIDATES)},
+                "volatility": {"passed": volatility_passed, "total": liquidity_passed},
+                "performance": {"passed": performance_passed, "total": volatility_passed},
+                "sector": {"passed": len(best_stocks), "total": performance_passed}
+            },
+            "selected_stocks": [
+                {
+                    "rank": i,
+                    "symbol": r['symbol'],
+                    "sector": self.SECTOR_MAP.get(r['symbol'], "Other"),
+                    "pnl": round(r.get('pnl', 0), 2),
+                    "win_rate": round(r.get('win_rate', 0), 1),
+                    "profit_factor": round(r.get('profit_factor', 0), 2),
+                    "trades": r.get('trades', 0),
+                    "score": round(r.get('score', 0), 2),
+                    "avg_daily_volume": int(r.get('avg_daily_volume', 0)),
+                    "atr_percent": round(r.get('atr_percent', 0), 2)
+                }
+                for i, r in enumerate(selected_results, 1)
+            ],
+            "sector_distribution": sector_distribution
+        }
+        
+        # Save to JSON file for dashboard
+        report_file = os.path.join("data", "stock_selection_report.json")
+        os.makedirs("data", exist_ok=True)
+        with open(report_file, 'w') as f:
+            json.dump(dashboard_report, f, indent=2)
+        
+        logger.info(f"📊 Selection report saved to {report_file}")
+        
+        # Create text report
         report = "\n" + "="*70 + "\n"
         report += "📊 PROFESSIONAL STOCK OPTIMIZATION REPORT\n"
         report += "="*70 + "\n\n"
@@ -403,9 +459,6 @@ class StockOptimizer:
         report += f"Filters: Liquidity + Volatility + Performance + Sector Diversity\n\n"
         report += "TOP PERFORMERS (Use These!):\n"
         report += "-"*70 + "\n"
-        
-        selected_results = [x for x in all_results if x['symbol'] in best_stocks]
-        selected_results.sort(key=lambda x: x.get('score', 0), reverse=True)
         
         for i, r in enumerate(selected_results, 1):
             sector = self.SECTOR_MAP.get(r['symbol'], "Other")
