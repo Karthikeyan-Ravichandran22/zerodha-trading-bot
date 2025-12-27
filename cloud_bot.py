@@ -500,7 +500,17 @@ class CloudTradingBot:
             logger.error(f"Gold paper trading error: {e}")
     
     def scan_for_signals(self):
-        """Scan all stocks for signals"""
+        """
+        Professional Signal Prioritization System
+        
+        Instead of taking the first signal, we:
+        1. Scan ALL stocks
+        2. Collect ALL valid signals
+        3. Score and rank by confidence
+        4. Take only the BEST 1-2 trades
+        
+        This is how Renaissance Technologies and top quant funds operate.
+        """
         if not self.is_trading_time():
             return
         
@@ -537,6 +547,9 @@ class CloudTradingBot:
         
         logger.info(f"🔍 Scanning {len(self.current_watchlist)} stocks... (Sentiment: {self.market_filter.sentiment})")
         
+        # STEP 1: Collect ALL signals from ALL stocks
+        all_signals = []
+        
         for symbol in self.current_watchlist:
             try:
                 data = self.data_fetcher.get_ohlc_data(symbol, "5minute", 5)
@@ -548,14 +561,14 @@ class CloudTradingBot:
                 
                 if signal:
                     # Check market sentiment
-                    can_trade, sentiment_reason = self.market_filter.should_trade(signal.signal.value)
-                    if not can_trade:
-                        logger.info(f"⚠️ Skipping {symbol}: {sentiment_reason}")
+                    can_trade_sentiment, sentiment_reason = self.market_filter.should_trade(signal.signal.value)
+                    if not can_trade_sentiment:
+                        logger.debug(f"⚠️ {symbol}: {sentiment_reason}")
                         continue
                     
                     # Check if already have position in this stock
                     if position_manager.has_position(symbol):
-                        logger.info(f"⚠️ Skipping {symbol}: Already have open position")
+                        logger.debug(f"⚠️ {symbol}: Already have open position")
                         continue
                     
                     # Check if trade is profitable after brokerage
@@ -563,13 +576,55 @@ class CloudTradingBot:
                         signal.entry_price, signal.target, signal.quantity, min_profit=20
                     )
                     if not is_profitable:
-                        logger.info(f"⚠️ Skipping {symbol}: {profit_reason}")
+                        logger.debug(f"⚠️ {symbol}: {profit_reason}")
                         continue
                     
-                    self.process_signal(signal)
+                    # Signal passed all checks - add to collection
+                    all_signals.append(signal)
+                    logger.info(f"✅ {symbol}: Signal collected (Confidence: {signal.confidence:.0f}%)")
                     
             except Exception as e:
                 logger.error(f"Error scanning {symbol}: {e}")
+        
+        # STEP 2: Check if we found any signals
+        if not all_signals:
+            logger.info("📊 No valid signals found in this scan")
+            return
+        
+        # STEP 3: Sort signals by confidence (highest first)
+        all_signals.sort(key=lambda s: s.confidence, reverse=True)
+        
+        # STEP 4: Log all signals found and ranking
+        logger.info(f"🎯 Found {len(all_signals)} signal(s). Ranking by quality:")
+        for i, signal in enumerate(all_signals, 1):
+            logger.info(f"  #{i}: {signal.symbol} - {signal.confidence:.0f}% confidence | "
+                       f"Entry: ₹{signal.entry_price} | Target: ₹{signal.target} | "
+                       f"Potential: ₹{(signal.target - signal.entry_price) * signal.quantity:.0f}")
+        
+        # STEP 5: Determine how many trades we can take
+        max_positions = MAX_OPEN_POSITIONS
+        slots_available = max_positions - len(open_positions)
+        
+        if slots_available <= 0:
+            logger.info("⚠️ All position slots occupied. Skipping new trades.")
+            return
+        
+        # STEP 6: Take only the BEST signals (top 1-2)
+        signals_to_take = all_signals[:slots_available]
+        
+        logger.info(f"🚀 Taking {len(signals_to_take)} BEST signal(s) out of {len(all_signals)} found:")
+        
+        for signal in signals_to_take:
+            logger.info(f"  ✅ SELECTED: {signal.symbol} ({signal.confidence:.0f}% confidence)")
+            self.process_signal(signal)
+        
+        # Log rejected signals (for transparency)
+        if len(all_signals) > len(signals_to_take):
+            rejected = all_signals[len(signals_to_take):]
+            logger.info(f"⏩ Skipped {len(rejected)} lower-quality signal(s):")
+            for signal in rejected:
+                logger.info(f"  ⏭️  {signal.symbol} ({signal.confidence:.0f}% confidence) - "
+                           f"Lower priority")
     
     def process_signal(self, signal):
         """Process a trading signal"""
